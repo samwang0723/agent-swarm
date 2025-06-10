@@ -9,6 +9,7 @@
     "dev": "tsx src/index.ts",
     "api": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "start:with-restaurant": "./scripts/start-with-restaurant-booking.sh",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "test": "jest"

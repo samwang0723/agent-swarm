@@ -2,8 +2,8 @@ import { AnthropicProviderOptions } from '@ai-sdk/anthropic';
 import { streamText, smoothStream, LanguageModelV1 } from 'ai';
 import { messageHistory } from '@messages/history';
 import { OutputStrategy } from './types';
+import { toolRegistry } from '../tools/index.js';
 import logger from '@utils/logger';
-import { SSEOutput } from './output-strategies';
 
 export async function sendMessage(
   model: LanguageModelV1,
@@ -20,29 +20,79 @@ export async function sendMessage(
   // Get current history for this user
   const history = messageHistory.getHistory(userId);
 
-  const { textStream, reasoning, reasoningDetails } = await streamText({
+  const result = await streamText({
     model: model,
-    system: 'You are a helpful assistant.',
+    system: `You are a helpful assistant with access to restaurant booking tools. 
+    
+When searching for restaurants, you should:
+- Act as a professional personal assistant 
+- Evaluate user conditions and pick the best suitable restaurant without asking too many questions
+- List signature dishes and approximate pricing per person for selected restaurants
+- Always check reservation/booking options and attempt to make reservations directly
+- Use user contact info: Name: Sam Wang, Email: sam.wang.0723@gmail.com, Phone: +886953201505
+- Skip Facebook URLs when booking and accept all cookies
+- If reservation URLs open in new tabs, handle the navigation appropriately
+
+Be proactive in helping with restaurant selection and booking.`,
     experimental_transform: smoothStream(),
+    tools: toolRegistry.getTools(),
+    maxSteps: 5, // Enable multi-step tool calls
     providerOptions: {
       anthropic: {
         thinking: { type: 'enabled', budgetTokens: 12000 },
       } satisfies AnthropicProviderOptions,
     },
     messages: history,
+    onStepFinish({
+      stepType,
+      toolCalls,
+      toolResults,
+      text,
+      finishReason,
+      usage,
+      response,
+    }) {
+      // Log step information for debugging
+      logger.info(
+        `Step finished - Type: ${stepType}, Tools: ${toolCalls.length}, Results: ${toolResults.length}`
+      );
+
+      if (toolCalls.length > 0) {
+        logger.info(
+          'Tool calls:',
+          toolCalls.map(tc => `${tc.toolName}(${JSON.stringify(tc.args)})`)
+        );
+      }
+
+      if (toolResults.length > 0) {
+        logger.info(
+          'Tool results:',
+          toolResults.map(tr => `${tr.toolName}: ${typeof tr.result}`)
+        );
+      }
+    },
     onError({ error }) {
       logger.error('sendMessage', error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       if (output.onError) {
-        output.onError(errorMessage);
+        try {
+          output.onError(errorMessage);
+        } catch (streamError) {
+          logger.error('Error while handling onError:', streamError);
+        }
       }
     },
-    onFinish({ text, finishReason, usage, response }) {
-      // Add assistant message to history
-      messageHistory.addAssistantMessage(userId, text);
+    onFinish(finishResult) {
+      // The messages will be handled after the stream is complete
+      // since they're available on the result object
+
       if (output.onFinish) {
-        output.onFinish({ complete: true, sessionId: userId });
+        try {
+          output.onFinish({ complete: true, sessionId: userId });
+        } catch (streamError) {
+          logger.error('Error while handling onFinish:', streamError);
+        }
       }
     },
   });
@@ -53,11 +103,39 @@ export async function sendMessage(
   }
 
   // Collect the final text and stream it using the output strategy
-  let finalText = '';
+  // Use array for efficient string concatenation with lazy evaluation
+  const textChunks: string[] = [];
+  let cachedAccumulated: string | null = null;
+  let cacheValid = false;
 
-  for await (const text of textStream) {
-    finalText += text;
-    output.onChunk(text, finalText);
+  // Lazy getter for accumulated text - only builds when needed
+  const getAccumulated = (): string => {
+    if (!cacheValid) {
+      cachedAccumulated = textChunks.join('');
+      cacheValid = true;
+    }
+    return cachedAccumulated!;
+  };
+
+  for await (const text of result.textStream) {
+    textChunks.push(text);
+    cacheValid = false; // Invalidate cache when new text is added
+
+    // Pass lazy accumulator - only builds string if output strategy needs it
+    output.onChunk(text, getAccumulated());
+  }
+
+  // Get the final accumulated text
+  const finalText = getAccumulated();
+
+  // After streaming is complete, add response messages (including tool calls/results) to history
+  try {
+    const responseObject = await result.response;
+    if (responseObject?.messages && responseObject.messages.length > 0) {
+      messageHistory.addToolMessages(userId, responseObject.messages);
+    }
+  } catch (error) {
+    logger.error('Error adding response messages to history:', error);
   }
 
   return {

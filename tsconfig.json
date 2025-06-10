@@ -18,7 +18,8 @@
       "@/*": ["./*"],
       "@messages/*": ["messages/*"],
       "@config/*": ["config/*"],
-      "@utils/*": ["utils/*"]
+      "@utils/*": ["utils/*"],
+      "@tools/*": ["tools/*"]
     }
   },
   "include": ["src/**/*"],

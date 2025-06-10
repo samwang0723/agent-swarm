@@ -15,6 +15,7 @@ A powerful AI Agent Swarm application built with TypeScript, featuring both inte
 - **TypeScript**: Full type safety and modern development experience
 - **Streaming Support**: Real-time AI response streaming for both console and API
 - **Model Context Protocol (MCP)**: Advanced AI model integration
+- **Restaurant Booking Tools**: Integrated restaurant search and booking capabilities via MCP
 
 ## 📋 Prerequisites
 
@@ -49,6 +50,9 @@ A powerful AI Agent Swarm application built with TypeScript, featuring both inte
 
    ```
    ANTHROPIC_API_KEY=your_api_key_here
+   RESTAURANT_BOOKING_MCP_URL=http://localhost:3001/mcp
+   RESTAURANT_BOOKING_MCP_HEALTH_URL=http://localhost:3001/health
+   RESTAURANT_BOOKING_MCP_ENABLED=true
    ```
 
 ## 🚀 Usage
@@ -94,7 +98,39 @@ curl -X POST http://localhost:3000/chat/stream \
 curl -X POST http://localhost:3000/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello, Claude!", "sessionId": "user-123"}'
+
+# Restaurant search example
+curl -X POST http://localhost:3000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Find me a romantic restaurant for a date tonight in Taipei", "sessionId": "user-123"}'
 ```
+
+## 🍽️ Restaurant Booking Tools
+
+The agent-swarm integrates with a restaurant booking MCP server that provides the following capabilities:
+
+### Available Tools
+
+- **search_restaurants**: Search for restaurants based on location, cuisine, mood, and event type
+- **get_restaurant_details**: Get detailed information about specific restaurants
+- **get_booking_instructions**: Get reservation instructions for restaurants
+- **check_availability**: Check reservation availability (mock implementation)
+- **make_reservation**: Attempt to make restaurant reservations (mock implementation)
+
+### Restaurant Booking Features
+
+- 🎯 **Smart Restaurant Recommendations**: AI-powered restaurant selection based on mood, event type, and preferences
+- 🗺️ **Location-based Search**: Search by coordinates or place names (defaults to Taiwan)
+- 🍜 **Cuisine & Food Type Search**: Find specific cuisines or food types (hotpot, sushi, etc.)
+- 💰 **Price Level Filtering**: Filter by price range (1=inexpensive, 4=very expensive)
+- 🌐 **Multi-language Support**: English, Traditional Chinese, Japanese, Korean, Thai
+- 📞 **Reservation Assistance**: Automated booking instructions and availability checking
+
+### Setup Restaurant Booking MCP Server
+
+To use the restaurant booking tools, you need to run the restaurant booking MCP server separately. Make sure it's running on the configured URL (default: `http://localhost:3001`).
+
+The server requires a Google Maps API key for restaurant search functionality.
 
 ## 🏗️ Architecture
 
@@ -107,8 +143,12 @@ src/
 │   ├── output-strategies.ts  # Console, SSE, and Collect output implementations
 │   ├── chat.ts              # Unified sendMessage function with streaming
 │   └── history.ts           # Message history management
+├── tools/
+│   ├── index.ts             # Tool registry and management
+│   └── restaurant-booking.ts # Restaurant booking MCP client tools
 ├── config/
-│   └── index.ts             # Configuration management
+│   ├── index.ts             # Configuration management
+│   └── mcp.ts               # MCP server configuration
 ├── utils/
 │   └── logger.ts            # Winston-based logging utility
 ├── index.ts                 # Interactive console interface
@@ -159,15 +199,16 @@ make clean
 
 ## 📚 Scripts
 
-| Script             | Description            |
-| ------------------ | ---------------------- |
-| `npm run dev`      | Start HTTP API server  |
-| `npm run api`      | Start HTTP API server  |
-| `npm run build`    | Build for production   |
-| `npm run start`    | Start production build |
-| `npm test`         | Run test suite         |
-| `npm run lint`     | Run ESLint             |
-| `npm run lint:fix` | Fix ESLint issues      |
+| Script                          | Description                              |
+| ------------------------------- | ---------------------------------------- |
+| `npm run dev`                   | Start HTTP API server                    |
+| `npm run api`                   | Start HTTP API server                    |
+| `npm run start:with-restaurant` | Start with restaurant booking MCP server |
+| `npm run build`                 | Build for production                     |
+| `npm run start`                 | Start production build                   |
+| `npm test`                      | Run test suite                           |
+| `npm run lint`                  | Run ESLint                               |
+| `npm run lint:fix`              | Fix ESLint issues                        |
 
 ## 🎯 Key Technologies
 

@@ -1,4 +1,4 @@
-import { Message } from "./types";
+import { Message } from './types';
 
 // Message history management class
 class MessageHistory {
@@ -17,7 +17,7 @@ class MessageHistory {
    */
   addUserMessage(userId: string, message: string): void {
     const userHistory = this.getHistory(userId);
-    userHistory.push({ role: "user", content: message });
+    userHistory.push({ role: 'user', content: message });
     this.history.set(userId, userHistory);
   }
 
@@ -26,7 +26,7 @@ class MessageHistory {
    */
   addAssistantMessage(userId: string, message: string): void {
     const userHistory = this.getHistory(userId);
-    userHistory.push({ role: "assistant", content: message });
+    userHistory.push({ role: 'assistant', content: message });
 
     // Ensure we don't exceed the maximum history pairs
     // Each pair consists of 1 user + 1 assistant message
@@ -35,6 +35,15 @@ class MessageHistory {
       userHistory.splice(0, 2);
     }
 
+    this.history.set(userId, userHistory);
+  }
+
+  /**
+   * Add tool call and tool result messages to the history
+   */
+  addToolMessages(userId: string, toolMessages: Message[]): void {
+    const userHistory = this.getHistory(userId);
+    userHistory.push(...toolMessages);
     this.history.set(userId, userHistory);
   }
 

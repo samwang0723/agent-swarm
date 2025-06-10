@@ -6,6 +6,7 @@ import { messageHistory } from '@messages/history';
 import { sendMessage } from '@messages/chat';
 import { SSEOutput } from '@messages/output-strategies';
 import { OutputStrategy } from '@messages/types';
+import { toolRegistry } from './tools/index.js';
 import logger from '@utils/logger';
 
 // Load environment variables
@@ -42,8 +43,18 @@ app.use((req, res, next) => {
 });
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req: Request, res: Response) => {
+  const health = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    mcp: toolRegistry.getStatus(),
+    tools: {
+      total: toolRegistry.getToolNames().length,
+      names: toolRegistry.getToolNames(),
+    },
+  };
+
+  res.json(health);
 });
 
 // Create new chat session
@@ -102,10 +113,18 @@ app.post('/chat/:sessionId/stream', async (req: Request, res: Response) => {
     logger.error('Chat error:', error);
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
-    res.write(
-      `event: error\ndata: ${JSON.stringify({ error: errorMessage })}\n\n`
-    );
-    res.end();
+
+    // Only write error if response is still writable
+    if (!res.destroyed && res.writable) {
+      try {
+        res.write(
+          `event: error\ndata: ${JSON.stringify({ error: errorMessage })}\n\n`
+        );
+        res.end();
+      } catch (writeError) {
+        logger.error('Error writing to response stream:', writeError);
+      }
+    }
   }
 });
 

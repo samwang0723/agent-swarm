@@ -6,7 +6,7 @@ import { messageHistory } from '@messages/history';
 import { sendMessage } from '@messages/chat';
 import { SSEOutput } from '@messages/output-strategies';
 import { OutputStrategy } from '@messages/types';
-import { toolRegistry } from './tools/index.js';
+import { toolRegistry } from '@tools/index';
 import logger from '@utils/logger';
 
 // Load environment variables

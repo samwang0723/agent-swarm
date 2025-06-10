@@ -1,4 +1,4 @@
-import { McpServerConfig } from '../tools/mcp-client.js';
+import { McpServerConfig } from '@tools/mcp-client';
 
 export const mcpServers: McpServerConfig[] = [
   {

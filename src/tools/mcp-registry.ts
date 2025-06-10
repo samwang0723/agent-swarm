@@ -1,5 +1,5 @@
 import { Tool } from 'ai';
-import { McpClient, McpServerConfig } from './mcp-client.js';
+import { McpClient, McpServerConfig } from '@tools/mcp-client';
 import logger from '@utils/logger';
 
 export class McpRegistry {

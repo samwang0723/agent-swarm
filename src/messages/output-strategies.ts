@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { SSEOutputStrategy, OutputStrategy } from './types';
+import { SSEOutputStrategy, OutputStrategy } from '@messages/types';
 
 export class SSEOutput implements SSEOutputStrategy {
   response: Response;

@@ -1,4 +1,4 @@
-import { Message } from './types';
+import { Message } from '@messages/types';
 
 // Message history management class
 class MessageHistory {

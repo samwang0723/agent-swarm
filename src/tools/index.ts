@@ -1,5 +1,5 @@
-import { McpRegistry } from './mcp-registry.js';
-import { mcpServers } from '../config/mcp.js';
+import { McpRegistry } from '@tools/mcp-registry';
+import { mcpServers } from '@config/mcp';
 import logger from '@utils/logger';
 
 export class ToolRegistry {

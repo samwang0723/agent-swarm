@@ -1,10 +1,10 @@
 import { AnthropicProviderOptions } from '@ai-sdk/anthropic';
 import { streamText, smoothStream, LanguageModelV1 } from 'ai';
 import { messageHistory } from '@messages/history';
-import { OutputStrategy } from './types';
-import { toolRegistry } from '../tools/index.js';
+import { OutputStrategy } from '@messages/types';
+import { toolRegistry } from '@tools/index';
 import logger from '@utils/logger';
-import { DEFAULT_SYSTEM_PROMPT } from './system-prompt';
+import { DEFAULT_SYSTEM_PROMPT } from '@messages/system-prompt';
 
 export async function sendMessage(
   model: LanguageModelV1,

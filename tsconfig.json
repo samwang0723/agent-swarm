@@ -19,7 +19,8 @@
       "@messages/*": ["messages/*"],
       "@config/*": ["config/*"],
       "@utils/*": ["utils/*"],
-      "@tools/*": ["tools/*"]
+      "@tools/*": ["tools/*"],
+      "@agents/*": ["agents/*"]
     }
   },
   "include": ["src/**/*"],

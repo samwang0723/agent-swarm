@@ -5,6 +5,7 @@ import logger from '@utils/logger';
 export class McpRegistry {
   private clients: Map<string, McpClient> = new Map();
   private allTools: Map<string, Tool> = new Map();
+  private toolsByServer: Map<string, Map<string, Tool>> = new Map();
 
   constructor(private configs: McpServerConfig[]) {}
 
@@ -44,12 +45,23 @@ export class McpRegistry {
 
       this.clients.set(config.name, client);
 
+      // Initialize server-specific tools map
+      const serverTools = new Map<string, Tool>();
+      this.toolsByServer.set(config.name, serverTools);
+
       // Register all tools from this client
       const tools = client.getAvailableTools();
+      const toolNames = client.getToolNames();
+      
       tools.forEach((tool, index) => {
-        const toolName = client.getToolNames()[index];
+        const toolName = toolNames[index];
         const prefixedName = `${config.name}_${toolName}`;
+        
+        // Store in flattened map with prefix
         this.allTools.set(prefixedName, tool);
+        
+        // Store in server-specific map without prefix
+        serverTools.set(toolName, tool);
       });
 
       logger.info(`Registered ${tools.length} tools from ${config.name}`);
@@ -63,7 +75,7 @@ export class McpRegistry {
   }
 
   /**
-   * Get all registered tools as an object
+   * Get all registered tools as a flattened object with prefixed names
    */
   getTools(): Record<string, Tool> {
     const toolsObject: Record<string, Tool> = {};
@@ -74,10 +86,59 @@ export class McpRegistry {
   }
 
   /**
+   * Get tools grouped by MCP server name
+   */
+  getToolsByServerMap(): Record<string, Record<string, Tool>> {
+    const serverToolsObject: Record<string, Record<string, Tool>> = {};
+    
+    this.toolsByServer.forEach((tools, serverName) => {
+      const toolsObject: Record<string, Tool> = {};
+      tools.forEach((tool, toolName) => {
+        toolsObject[toolName] = tool;
+      });
+      serverToolsObject[serverName] = toolsObject;
+    });
+    
+    return serverToolsObject;
+  }
+
+  /**
+   * Get tools from a specific MCP server as objects
+   */
+  getServerTools(serverName: string): Record<string, Tool> {
+    const serverTools = this.toolsByServer.get(serverName);
+    if (!serverTools) {
+      return {};
+    }
+    
+    const toolsObject: Record<string, Tool> = {};
+    serverTools.forEach((tool, toolName) => {
+      toolsObject[toolName] = tool;
+    });
+    return toolsObject;
+  }
+
+  /**
+   * Get tool names from a specific MCP server
+   */
+  getServerToolNames(serverName: string): string[] {
+    const serverTools = this.toolsByServer.get(serverName);
+    return serverTools ? Array.from(serverTools.keys()) : [];
+  }
+
+  /**
    * Get a specific tool by name
    */
   getTool(name: string): Tool | undefined {
     return this.allTools.get(name);
+  }
+
+  /**
+   * Get a specific tool from a specific server
+   */
+  getServerTool(serverName: string, toolName: string): Tool | undefined {
+    const serverTools = this.toolsByServer.get(serverName);
+    return serverTools?.get(toolName);
   }
 
   /**
@@ -88,10 +149,25 @@ export class McpRegistry {
   }
 
   /**
+   * Check if a server has a specific tool
+   */
+  hasServerTool(serverName: string, toolName: string): boolean {
+    const serverTools = this.toolsByServer.get(serverName);
+    return serverTools?.has(toolName) ?? false;
+  }
+
+  /**
    * Get tool names
    */
   getToolNames(): string[] {
     return Array.from(this.allTools.keys());
+  }
+
+  /**
+   * Get available MCP server names
+   */
+  getServerNames(): string[] {
+    return Array.from(this.toolsByServer.keys());
   }
 
   /**
@@ -103,21 +179,14 @@ export class McpRegistry {
 
     this.configs.forEach(config => {
       const client = this.clients.get(config.name);
+      const serverTools = this.toolsByServer.get(config.name);
       status[config.name] = {
         connected: !!client,
-        toolCount: client ? client.getToolNames().length : 0,
+        toolCount: serverTools ? serverTools.size : 0,
       };
     });
 
     return status;
   }
 
-  /**
-   * Get tools from a specific MCP server
-   */
-  getToolsByServer(serverName: string): string[] {
-    return this.getToolNames().filter(name =>
-      name.startsWith(`${serverName}_`)
-    );
-  }
 }

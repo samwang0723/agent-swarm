@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Streaming Chat API Demo</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .chat-container {
+        height: 400px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin: 20px 0;
+        background: #fafafa;
+        border-radius: 8px;
+      }
+      .message {
+        margin: 10px 0;
+        padding: 8px;
+        border-radius: 6px;
+      }
+      .user-message {
+        background: #007bff;
+        color: white;
+        text-align: right;
+      }
+      .assistant-message {
+        background: #e9ecef;
+        color: #333;
+      }
+      .input-container {
+        display: flex;
+        gap: 10px;
+      }
+      input[type='text'] {
+        flex: 1;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+      }
+      button {
+        padding: 10px 20px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .status {
+        margin: 10px 0;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      .status.info {
+        background: #d1ecf1;
+        color: #0c5460;
+      }
+      .status.error {
+        background: #f8d7da;
+        color: #721c24;
+      }
+      .status.success {
+        background: #d4edda;
+        color: #155724;
+      }
+      .typing-indicator {
+        color: #666;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🤖 Streaming Chat API Demo</h1>
+
+      <div class="status info" id="status">
+        Ready to chat! Create a session to start.
+      </div>
+
+      <button onclick="createSession()" id="createSessionBtn">
+        Create New Session
+      </button>
+
+      <div class="chat-container" id="chatContainer"></div>
+
+      <div class="input-container">
+        <input
+          type="text"
+          id="messageInput"
+          placeholder="Type your message..."
+          disabled
+        />
+        <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+        <button onclick="clearHistory()" id="clearBtn" disabled>Clear</button>
+      </div>
+    </div>
+
+    <script>
+      let sessionId = null;
+      let isStreaming = false;
+
+      function updateStatus(message, type = 'info') {
+        const status = document.getElementById('status');
+        status.textContent = message;
+        status.className = `status ${type}`;
+      }
+
+      function addMessage(content, isUser = false, isStreaming = false) {
+        const container = document.getElementById('chatContainer');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${
+          isUser ? 'user-message' : 'assistant-message'
+        }`;
+
+        if (isStreaming) {
+          messageDiv.id = 'streaming-message';
+          messageDiv.innerHTML =
+            content + '<span class="typing-indicator"> ●</span>';
+        } else {
+          messageDiv.textContent = content;
+        }
+
+        container.appendChild(messageDiv);
+        container.scrollTop = container.scrollHeight;
+        return messageDiv;
+      }
+
+      function updateStreamingMessage(content) {
+        const streamingDiv = document.getElementById('streaming-message');
+        if (streamingDiv) {
+          streamingDiv.textContent = content;
+          streamingDiv.removeAttribute('id');
+        }
+      }
+
+      async function createSession() {
+        try {
+          updateStatus('Creating new session...', 'info');
+          const response = await fetch('/chat/session', { method: 'POST' });
+          const data = await response.json();
+
+          sessionId = data.sessionId;
+          updateStatus(
+            `Session created: ${sessionId.substring(0, 8)}...`,
+            'success'
+          );
+
+          // Enable chat controls
+          document.getElementById('messageInput').disabled = false;
+          document.getElementById('sendBtn').disabled = false;
+          document.getElementById('clearBtn').disabled = false;
+          document.getElementById('createSessionBtn').textContent =
+            'New Session';
+
+          // Clear chat
+          document.getElementById('chatContainer').innerHTML = '';
+
+          // Focus input
+          document.getElementById('messageInput').focus();
+        } catch (error) {
+          updateStatus(`Error creating session: ${error.message}`, 'error');
+        }
+      }
+
+      async function sendMessage() {
+        if (!sessionId || isStreaming) return;
+
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+        if (!message) return;
+
+        // Add user message to chat
+        addMessage(message, true);
+        input.value = '';
+
+        // Disable controls during streaming
+        isStreaming = true;
+        document.getElementById('sendBtn').disabled = true;
+        document.getElementById('messageInput').disabled = true;
+
+        updateStatus('Claude is typing...', 'info');
+
+        try {
+          // Create streaming message placeholder
+          const streamingDiv = addMessage('', false, true);
+
+          // Start streaming
+          const response = await fetch(`/chat/${sessionId}/stream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message }),
+          });
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedText = '';
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  if (data.text) {
+                    accumulatedText =
+                      data.accumulated || accumulatedText + data.text;
+                    streamingDiv.textContent = accumulatedText;
+                  }
+                  if (data.complete) {
+                    updateStreamingMessage(accumulatedText);
+                  }
+                } catch (e) {
+                  // Ignore JSON parse errors from incomplete chunks
+                }
+              }
+            }
+          }
+
+          updateStatus('Ready to chat!', 'success');
+        } catch (error) {
+          updateStatus(`Error: ${error.message}`, 'error');
+          // Remove streaming placeholder on error
+          const streamingDiv = document.getElementById('streaming-message');
+          if (streamingDiv) streamingDiv.remove();
+        } finally {
+          // Re-enable controls
+          isStreaming = false;
+          document.getElementById('sendBtn').disabled = false;
+          document.getElementById('messageInput').disabled = false;
+          document.getElementById('messageInput').focus();
+        }
+      }
+
+      async function clearHistory() {
+        if (!sessionId) return;
+
+        try {
+          await fetch(`/chat/${sessionId}/history`, { method: 'DELETE' });
+          document.getElementById('chatContainer').innerHTML = '';
+          updateStatus('History cleared!', 'success');
+        } catch (error) {
+          updateStatus(`Error clearing history: ${error.message}`, 'error');
+        }
+      }
+
+      // Enter key to send message
+      document
+        .getElementById('messageInput')
+        .addEventListener('keypress', function (e) {
+          if (e.key === 'Enter' && !isStreaming) {
+            sendMessage();
+          }
+        });
+    </script>
+  </body>
+</html>

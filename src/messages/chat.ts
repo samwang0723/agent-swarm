@@ -4,6 +4,7 @@ import { messageHistory } from '@messages/history';
 import { OutputStrategy } from './types';
 import { toolRegistry } from '../tools/index.js';
 import logger from '@utils/logger';
+import { DEFAULT_SYSTEM_PROMPT } from './system-prompt';
 
 export async function sendMessage(
   model: LanguageModelV1,
@@ -22,18 +23,7 @@ export async function sendMessage(
 
   const result = await streamText({
     model: model,
-    system: `You are a helpful assistant with access to restaurant booking tools. 
-    
-When searching for restaurants, you should:
-- Act as a professional personal assistant 
-- Evaluate user conditions and pick the best suitable restaurant without asking too many questions
-- List signature dishes and approximate pricing per person for selected restaurants
-- Always check reservation/booking options and attempt to make reservations directly
-- Use user contact info: Name: Sam Wang, Email: sam.wang.0723@gmail.com, Phone: +886953201505
-- Skip Facebook URLs when booking and accept all cookies
-- If reservation URLs open in new tabs, handle the navigation appropriately
-
-Be proactive in helping with restaurant selection and booking.`,
+    system: DEFAULT_SYSTEM_PROMPT,
     experimental_transform: smoothStream(),
     tools: toolRegistry.getTools(),
     maxSteps: 10, // Enable multi-step tool calls
@@ -69,7 +59,7 @@ Be proactive in helping with restaurant selection and booking.`,
       if (toolResults.length > 0) {
         logger.info(
           'Tool results:',
-          toolResults.map(tr => `${tr.toolName}: ${typeof tr.result}`)
+          toolResults.map(tr => `${tr.toolName}: ${JSON.stringify(tr.result)}`)
         );
       }
     },

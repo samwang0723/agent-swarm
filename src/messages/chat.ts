@@ -2,17 +2,17 @@ import { AnthropicProviderOptions } from '@ai-sdk/anthropic';
 import { streamText, smoothStream, LanguageModelV1 } from 'ai';
 import { messageHistory } from '@messages/history';
 import { OutputStrategy } from './types';
-import { ConsoleOutput } from './output-strategies';
 import logger from '@utils/logger';
+import { SSEOutput } from './output-strategies';
 
 export async function sendMessage(
   model: LanguageModelV1,
   message: string,
   userId: string,
-  outputStrategy?: OutputStrategy
+  outputStrategy: OutputStrategy
 ) {
   // Use console output by default if no strategy provided
-  const output = outputStrategy || new ConsoleOutput();
+  const output = outputStrategy;
 
   // Add user message to history
   messageHistory.addUserMessage(userId, message);

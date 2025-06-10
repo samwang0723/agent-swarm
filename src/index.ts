@@ -1,24 +1,15 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import dotenv from 'dotenv';
-import readline from 'readline';
+import express, { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { sendMessage } from '@messages/chat';
 import { messageHistory } from '@messages/history';
+import { sendMessage } from '@messages/chat';
+import { SSEOutput } from '@messages/output-strategies';
+import { OutputStrategy } from '@messages/types';
+import logger from '@utils/logger';
 
 // Load environment variables
 dotenv.config();
-
-// ANSI color codes for terminal formatting
-const colors = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  blue: '\x1b[34m',
-  yellow: '\x1b[33m',
-  magenta: '\x1b[35m',
-  red: '\x1b[31m',
-};
 
 const anthropic = createAnthropic({
   baseURL: 'https://api.anthropic.com/v1',
@@ -28,98 +19,147 @@ const anthropic = createAnthropic({
 const MODEL = 'claude-sonnet-4-20250514';
 const model = anthropic(MODEL);
 
-// Create readline interface
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  prompt: `\n${colors.bold}${colors.cyan}🤖 You:${colors.reset} `,
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.json());
+app.use(express.static('public')); // For serving a simple web interface
+
+// CORS middleware for development
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header(
+    'Access-Control-Allow-Headers',
+    'Origin, X-Requested-With, Content-Type, Accept'
+  );
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
 });
 
-// Generate unique user ID for this session
-const userId = randomUUID();
+// Health check endpoint
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
-console.log(
-  `${colors.bold}${colors.green}🚀 Welcome to Interactive Claude Chat!${colors.reset}`
-);
-console.log(
-  `${colors.yellow}💡 Type 'exit', 'quit', or press Ctrl+C to end the conversation${colors.reset}`
-);
-console.log(
-  `${colors.yellow}🗑️  Type 'clear' to clear conversation history${colors.reset}`
-);
-console.log(
-  `${colors.yellow}📊 Type 'history' to see conversation statistics${colors.reset}`
-);
-console.log('─'.repeat(60));
+// Create new chat session
+app.post('/chat/session', (req: Request, res: Response) => {
+  const sessionId = randomUUID();
+  res.json({ sessionId });
+});
 
-// Handle user input
-rl.on('line', async input => {
-  const userInput = input.trim();
+// Get chat history
+app.get('/chat/:sessionId/history', (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  const history = messageHistory.getHistory(sessionId);
+  const pairCount = messageHistory.getMessagePairCount(sessionId);
 
-  // Handle special commands
-  if (
-    userInput.toLowerCase() === 'exit' ||
-    userInput.toLowerCase() === 'quit'
-  ) {
-    console.log(
-      `\n${colors.bold}${colors.green}👋 Goodbye! Thanks for chatting!${colors.reset}`
-    );
-    rl.close();
+  res.json({
+    sessionId,
+    messageCount: history.length,
+    pairCount,
+    messages: history,
+  });
+});
+
+// Clear chat history
+app.delete('/chat/:sessionId/history', (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  messageHistory.clearHistory(sessionId);
+  res.json({ message: 'History cleared', sessionId });
+});
+
+// Stream chat endpoint using Server-Sent Events (SSE)
+app.post('/chat/:sessionId/stream', async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  const { message } = req.body;
+
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ error: 'Message is required and must be a string' });
     return;
   }
 
-  if (userInput.toLowerCase() === 'clear') {
-    messageHistory.clearHistory(userId);
-    console.log(
-      `\n${colors.bold}${colors.yellow}🗑️  Conversation history cleared!${colors.reset}`
-    );
-    rl.prompt();
-    return;
-  }
+  // Set headers for Server-Sent Events
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control',
+  });
 
-  if (userInput.toLowerCase() === 'history') {
-    const pairCount = messageHistory.getMessagePairCount(userId);
-    console.log(
-      `\n${colors.bold}${colors.blue}📊 Conversation statistics:${colors.reset}`
-    );
-    console.log(`   • Message pairs: ${pairCount}`);
-    console.log(
-      `   • Total messages: ${messageHistory.getHistory(userId).length}`
-    );
-    rl.prompt();
-    return;
-  }
+  try {
+    // Create SSE output strategy
+    const sseOutput = new SSEOutput(res, sessionId);
 
-  if (!userInput) {
-    rl.prompt();
+    // Use the unified sendMessage function with SSE output
+    await sendMessage(model, message, sessionId, sseOutput);
+  } catch (error) {
+    logger.error('Chat error:', error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    res.write(
+      `event: error\ndata: ${JSON.stringify({ error: errorMessage })}\n\n`
+    );
+    res.end();
+  }
+});
+
+// Non-streaming chat endpoint (for simple request/response)
+app.post('/chat/:sessionId', async (req: Request, res: Response) => {
+  const { sessionId } = req.params;
+  const { message } = req.body;
+
+  if (!message || typeof message !== 'string') {
+    res.status(400).json({ error: 'Message is required and must be a string' });
     return;
   }
 
   try {
-    process.stdout.write(
-      `\n${colors.bold}${colors.magenta}🤖 Claude:${colors.reset}`
-    );
+    // Create collect output strategy to gather full response
+    const collectOutput = new (class implements OutputStrategy {
+      private fullText = '';
 
-    // Send message and stream response
-    await sendMessage(model, userInput, userId);
+      onChunk(text: string, accumulated: string): void {
+        this.fullText = accumulated;
+      }
 
-    rl.prompt();
+      getFullText(): string {
+        return this.fullText;
+      }
+    })();
+
+    // Use the unified sendMessage function with collect output
+    await sendMessage(model, message, sessionId, collectOutput);
+
+    res.json({
+      sessionId,
+      response: (collectOutput as any).getFullText(),
+      messageCount: messageHistory.getHistory(sessionId).length,
+    });
   } catch (error) {
-    console.error(
-      `\n${colors.bold}${colors.red}❌ Error:${colors.reset}`,
-      error instanceof Error ? error.message : error
-    );
-    rl.prompt();
+    logger.error('Chat error:', error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      error: errorMessage,
+      sessionId,
+    });
   }
 });
 
-// Handle Ctrl+C
-rl.on('SIGINT', () => {
-  console.log(
-    `\n\n${colors.bold}${colors.green}👋 Goodbye! Thanks for chatting!${colors.reset}`
-  );
-  process.exit(0);
+// Start server
+app.listen(PORT, () => {
+  logger.info(`🚀 Chat API Server running on http://localhost:${PORT}`);
+  logger.info(`📡 Streaming endpoint: POST /chat/:sessionId/stream`);
+  logger.info(`💬 Regular chat endpoint: POST /chat/:sessionId`);
+  logger.info(`🆕 Create session: POST /chat/session`);
+  logger.info(`📊 Get history: GET /chat/:sessionId/history`);
+  logger.info(`🗑️  Clear history: DELETE /chat/:sessionId/history`);
 });
 
-// Start the conversation
-rl.prompt();
+export default app;

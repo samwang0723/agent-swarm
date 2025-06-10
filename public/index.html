@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Streaming Chat API Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
@@ -91,6 +93,141 @@
         color: #666;
         font-style: italic;
       }
+
+      /* Markdown formatting styles */
+      .message h1,
+      .message h2,
+      .message h3,
+      .message h4,
+      .message h5,
+      .message h6 {
+        margin: 0.5em 0;
+        font-weight: bold;
+      }
+
+      .message h1 {
+        font-size: 1.5em;
+      }
+      .message h2 {
+        font-size: 1.3em;
+      }
+      .message h3 {
+        font-size: 1.1em;
+      }
+      .message h4,
+      .message h5,
+      .message h6 {
+        font-size: 1em;
+      }
+
+      .message code {
+        background: rgba(0, 0, 0, 0.1);
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 0.9em;
+      }
+
+      .message pre {
+        background: rgba(0, 0, 0, 0.1);
+        padding: 10px;
+        border-radius: 5px;
+        overflow-x: auto;
+        margin: 10px 0;
+      }
+
+      .message pre code {
+        background: none;
+        padding: 0;
+      }
+
+      .message blockquote {
+        border-left: 4px solid #ccc;
+        margin: 10px 0;
+        padding-left: 10px;
+        color: #666;
+        font-style: italic;
+      }
+
+      .message ul,
+      .message ol {
+        margin: 10px 0;
+        padding-left: 20px;
+      }
+
+      .message li {
+        margin: 5px 0;
+      }
+
+      .message table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 10px 0;
+      }
+
+      .message th,
+      .message td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+
+      .message th {
+        background-color: rgba(0, 0, 0, 0.1);
+        font-weight: bold;
+      }
+
+      .message strong {
+        font-weight: bold;
+      }
+
+      .message em {
+        font-style: italic;
+      }
+
+      .message a {
+        color: #007bff;
+        text-decoration: none;
+      }
+
+      .message a:hover {
+        text-decoration: underline;
+      }
+
+      .message hr {
+        border: none;
+        border-top: 1px solid #ccc;
+        margin: 15px 0;
+      }
+
+      .message img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 4px;
+      }
+
+      /* Special styling for user messages with markdown */
+      .user-message code {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .user-message pre {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      .user-message blockquote {
+        border-left-color: rgba(255, 255, 255, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      .user-message th {
+        background-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .user-message a {
+        color: #fff;
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
@@ -129,6 +266,19 @@
         status.className = `status ${type}`;
       }
 
+      function parseMarkdown(content) {
+        // Configure marked with safe options
+        marked.setOptions({
+          breaks: true,
+          gfm: true,
+          sanitize: false, // We'll use DOMPurify instead
+        });
+
+        const html = marked.parse(content);
+        // Sanitize the HTML to prevent XSS attacks
+        return DOMPurify.sanitize(html);
+      }
+
       function addMessage(content, isUser = false, isStreaming = false) {
         const container = document.getElementById('chatContainer');
         const messageDiv = document.createElement('div');
@@ -138,10 +288,15 @@
 
         if (isStreaming) {
           messageDiv.id = 'streaming-message';
-          messageDiv.innerHTML =
-            content + '<span class="typing-indicator"> ●</span>';
+          if (content) {
+            messageDiv.innerHTML =
+              parseMarkdown(content) +
+              '<span class="typing-indicator"> ●</span>';
+          } else {
+            messageDiv.innerHTML = '<span class="typing-indicator"> ●</span>';
+          }
         } else {
-          messageDiv.textContent = content;
+          messageDiv.innerHTML = parseMarkdown(content);
         }
 
         container.appendChild(messageDiv);
@@ -152,7 +307,7 @@
       function updateStreamingMessage(content) {
         const streamingDiv = document.getElementById('streaming-message');
         if (streamingDiv) {
-          streamingDiv.textContent = content;
+          streamingDiv.innerHTML = parseMarkdown(content);
           streamingDiv.removeAttribute('id');
         }
       }
@@ -233,7 +388,9 @@
                   if (data.text) {
                     accumulatedText =
                       data.accumulated || accumulatedText + data.text;
-                    streamingDiv.textContent = accumulatedText;
+                    streamingDiv.innerHTML =
+                      parseMarkdown(accumulatedText) +
+                      '<span class="typing-indicator"> ●</span>';
                   }
                   if (data.complete) {
                     updateStreamingMessage(accumulatedText);

@@ -36,7 +36,9 @@ When searching for restaurants, you should:
 Be proactive in helping with restaurant selection and booking.`,
     experimental_transform: smoothStream(),
     tools: toolRegistry.getTools(),
-    maxSteps: 5, // Enable multi-step tool calls
+    maxSteps: 10, // Enable multi-step tool calls
+    temperature: 0.7,
+    maxTokens: 200,
     providerOptions: {
       anthropic: {
         thinking: { type: 'enabled', budgetTokens: 12000 },

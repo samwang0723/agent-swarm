@@ -5,21 +5,7 @@ import logger from '@utils/logger';
 import { Agent, Hive } from 'agentswarm';
 import { ChatContext, createMultiServiceAgent } from '@/agents';
 import { z } from 'zod';
-import { join } from 'path';
-import { readFileSync } from 'fs';
-
-// Load system prompt from file
-function loadSystemPrompt(domain: string): string {
-  try {
-    // Use process.cwd() to get the project root, then navigate to config
-    const promptPath = join(process.cwd(), `src/config/prompts/${domain}.txt`);
-    return readFileSync(promptPath, 'utf-8').trim();
-  } catch (error) {
-    logger.error('Failed to load system prompt from file:', error);
-    // Fallback to a basic prompt if file loading fails
-    return `You are a professional ${domain} assistant with access to various tools and services.`;
-  }
-}
+import { loadSystemPrompt } from '@messages/system-prompt';
 
 // Helper function to create and configure the swarm
 function createSwarm(model: LanguageModelV1) {

@@ -5,7 +5,7 @@ import logger from '@utils/logger';
 import { Agent, Hive } from 'agentswarm';
 import { ChatContext, createMultiServiceAgent } from '@/agents';
 import { z } from 'zod';
-import { loadSystemPrompt } from '@messages/system-prompt';
+import { loadSystemPrompt } from '@/messages/prompt';
 
 // Helper function to create and configure the swarm
 function createSwarm(model: LanguageModelV1) {

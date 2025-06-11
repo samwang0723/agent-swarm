@@ -73,6 +73,7 @@ export class McpClient {
         },
       }),
     });
+    logger.info(`Session initialization request: ${this.config.url}`);
 
     if (!response.ok) {
       const errorText = await response.text();

@@ -36,7 +36,7 @@ const createMultiServiceAgent = (
   });
 
   const combinedTools = convertMultiServerToAgentTools(serverToolsMap);
-  logger.info(`combinedTools: ${JSON.stringify(combinedTools)}`);
+  // logger.info(`combinedTools: ${JSON.stringify(combinedTools)}`);
 
   return new Agent<ChatContext>({
     name: 'multi-service',

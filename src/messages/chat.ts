@@ -28,6 +28,26 @@ function createSwarm(model: LanguageModelV1) {
     loadSystemPrompt('restaurant-recommendation')
   );
 
+  //   const browserBookingAgent = createMultiServiceAgent(
+  //     ['browser-booking'],
+  //     loadSystemPrompt('browser-booking')
+  //   );
+
+  //   recommendationAgent.tools = {
+  //     ...recommendationAgent.tools,
+  //     transfer_to_browser_booking: {
+  //       type: 'handover',
+  //       description: 'Transfer to browser booking agent',
+  //       parameters: z.object({
+  //         topic: z.string().describe('URL to browse and booking instructions'),
+  //       }),
+  //       execute: async ({ topic }) => ({
+  //         agent: browserBookingAgent,
+  //         context: { topic },
+  //       }),
+  //     },
+  //   };
+
   const receptionistAgent = new Agent<ChatContext>({
     name: 'Receptionist',
     description: 'Routes user queries to appropriate agents',

@@ -19,5 +19,12 @@ export const mcpServers: McpServerConfig[] = [
       process.env.TIME_MCP_HEALTH_URL || 'http://localhost:3000/health',
     enabled: process.env.TIME_MCP_ENABLED !== 'false',
   },
+  // {
+  //   name: 'browser-booking',
+  //   url: process.env.BROWSER_MCP_URL || 'http://localhost:3000/mcp',
+  //   healthUrl:
+  //     process.env.BROWSER_MCP_HEALTH_URL || 'http://localhost:3000/health',
+  //   enabled: process.env.BROWSER_MCP_ENABLED !== 'false',
+  // },
   // Add more MCP servers here as needed
 ];

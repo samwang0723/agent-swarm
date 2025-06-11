@@ -17,7 +17,8 @@ const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-const MODEL = 'claude-sonnet-4-20250514';
+// const MODEL = 'claude-sonnet-4-20250514';
+const MODEL = 'claude-3-5-sonnet-20241022';
 const model = anthropic(MODEL);
 
 const app = express();

@@ -7,6 +7,9 @@ import { ChatContext, createMultiServiceAgent } from '@/agents';
 import { z } from 'zod';
 import { loadSystemPrompt } from '@/messages/prompt';
 
+// Cache for swarms to persist across messages
+const swarmCache = new Map<string, any>();
+
 // Helper function to create and configure the swarm
 function createSwarm(model: LanguageModelV1) {
   const recommendationAgent = createMultiServiceAgent(
@@ -167,8 +170,12 @@ export async function sendMessage(
   messageHistory.addUserMessage(userId, message);
   const history = messageHistory.getHistory(userId);
 
-  // Create swarm and start streaming
-  const swarm = createSwarm(model);
+  // Get or create swarm for this user
+  let swarm = swarmCache.get(userId);
+  if (!swarm) {
+    swarm = createSwarm(model);
+    swarmCache.set(userId, swarm);
+  }
 
   try {
     const result = swarm.streamText({

@@ -556,7 +556,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- Built with [AgentSwarm](https://github.com/AI-Broker/agentswarm) framework
+- Built with [AgentSwarm](https://github.com/K-Mistele/swarm) framework
 - Powered by [Anthropic's Claude](https://www.anthropic.com/) AI model
 - MCP (Model Context Protocol) integration for extensible tool support
 

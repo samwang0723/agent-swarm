@@ -1,5 +1,5 @@
-import winston from "winston";
-import config from "@config/index";
+import winston from 'winston';
+import config from '@config/index';
 
 interface CustomLogger extends winston.Logger {
   getLevel(): string;
@@ -14,7 +14,7 @@ const logger: CustomLogger = winston.createLogger({
     winston.format.printf(({ timestamp, level, message, ...rest }) => {
       const args = Object.keys(rest).length
         ? JSON.stringify(rest, null, 2)
-        : "";
+        : '';
       return `${timestamp} ${level}: ${message} ${args}`;
     })
   ),
@@ -23,28 +23,28 @@ const logger: CustomLogger = winston.createLogger({
       format: winston.format.combine(
         winston.format.colorize(),
         winston.format.printf(({ timestamp, level, message, ...rest }) => {
-          let args = "";
-          if (typeof message === "object") {
+          let args = '';
+          if (typeof message === 'object') {
             args = JSON.stringify(message, null, 2);
-            message = "";
+            message = '';
           }
           const extraArgs = Object.keys(rest).length
             ? JSON.stringify(rest, null, 2)
-            : "";
+            : '';
           return `${timestamp} ${level}: ${message} ${args} ${extraArgs}`.trim();
         })
-      )
+      ),
     }),
-    new winston.transports.File({ filename: "error.log", level: "error" }),
-    new winston.transports.File({ filename: "combined.log" })
-  ]
+    new winston.transports.File({ filename: 'error.log', level: 'error' }),
+    new winston.transports.File({ filename: 'combined.log' }),
+  ],
 }) as CustomLogger;
 
 // Add getLevel and setLevel methods to make it compatible with Slack Bolt
 logger.getLevel = (): string => logger.level as string;
 logger.setLevel = (level: string): void => {
   logger.level = level;
-  logger.transports.forEach((transport) => {
+  logger.transports.forEach(transport => {
     transport.level = level;
   });
 };

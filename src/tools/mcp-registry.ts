@@ -52,14 +52,14 @@ export class McpRegistry {
       // Register all tools from this client
       const tools = client.getAvailableTools();
       const toolNames = client.getToolNames();
-      
+
       tools.forEach((tool, index) => {
         const toolName = toolNames[index];
         const prefixedName = `${config.name}_${toolName}`;
-        
+
         // Store in flattened map with prefix
         this.allTools.set(prefixedName, tool);
-        
+
         // Store in server-specific map without prefix
         serverTools.set(toolName, tool);
       });
@@ -90,7 +90,7 @@ export class McpRegistry {
    */
   getToolsByServerMap(): Record<string, Record<string, Tool>> {
     const serverToolsObject: Record<string, Record<string, Tool>> = {};
-    
+
     this.toolsByServer.forEach((tools, serverName) => {
       const toolsObject: Record<string, Tool> = {};
       tools.forEach((tool, toolName) => {
@@ -98,7 +98,7 @@ export class McpRegistry {
       });
       serverToolsObject[serverName] = toolsObject;
     });
-    
+
     return serverToolsObject;
   }
 
@@ -110,7 +110,7 @@ export class McpRegistry {
     if (!serverTools) {
       return {};
     }
-    
+
     const toolsObject: Record<string, Tool> = {};
     serverTools.forEach((tool, toolName) => {
       toolsObject[toolName] = tool;
@@ -188,5 +188,4 @@ export class McpRegistry {
 
     return status;
   }
-
 }

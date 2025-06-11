@@ -1,7 +1,6 @@
 import { Agent } from 'agentswarm';
 import { toolRegistry } from '@tools/index';
 import { convertToAgentTools, convertMultiServerToAgentTools } from './convert';
-import logger from '@/utils/logger';
 
 export interface ChatContext {
   topic: string | null;

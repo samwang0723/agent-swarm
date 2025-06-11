@@ -2,64 +2,17 @@ import { LanguageModelV1 } from 'ai';
 import { messageHistory } from '@messages/history';
 import { OutputStrategy } from '@messages/types';
 import logger from '@utils/logger';
-import { Agent, Hive } from 'agentswarm';
-import { ChatContext, createMultiServiceAgent } from '@/agents';
-import { z } from 'zod';
-import { loadSystemPrompt } from '@/messages/prompt';
+import { Hive, Swarm } from 'agentswarm';
+import { ChatContext } from '@/agents';
+import createBusinessLogicAgent from '@/agents/business-logic';
 
 // Cache for swarms to persist across messages
-const swarmCache = new Map<string, any>();
+const swarmCache = new Map<string, Swarm<ChatContext>>();
 
 // Helper function to create and configure the swarm
 function createSwarm(model: LanguageModelV1) {
-  const recommendationAgent = createMultiServiceAgent(
-    ['restaurant-booking', 'time'],
-    loadSystemPrompt('restaurant-recommendation') +
-      '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete restaurant recommendation ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.'
-  );
-
-  //   const browserBookingAgent = createMultiServiceAgent(
-  //     ['browser-booking'],
-  //     loadSystemPrompt('browser-booking')
-  //   );
-
-  //   recommendationAgent.tools = {
-  //     ...recommendationAgent.tools,
-  //     transfer_to_browser_booking: {
-  //       type: 'handover',
-  //       description: 'Transfer to browser booking agent',
-  //       parameters: z.object({
-  //         topic: z.string().describe('URL to browse and booking instructions'),
-  //       }),
-  //       execute: async ({ topic }) => ({
-  //         agent: browserBookingAgent,
-  //         context: { topic },
-  //       }),
-  //     },
-  //   };
-
-  const receptionistAgent = new Agent<ChatContext>({
-    name: 'Receptionist',
-    description: 'Routes user queries to appropriate agents',
-    instructions:
-      "You are a helpful receptionist. Provide a brief, friendly initial response acknowledging the user's request, then immediately transfer to the appropriate agent. Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently.",
-    tools: {
-      transfer_to_recommendation: {
-        type: 'handover',
-        description: 'Transfer to recommendation agent',
-        parameters: z.object({
-          topic: z.string().describe('Restaurant preference topic'),
-        }),
-        execute: async ({ topic }) => ({
-          agent: recommendationAgent,
-          context: { topic },
-        }),
-      },
-    },
-  });
-
   const hive = new Hive<ChatContext>({
-    queen: receptionistAgent,
+    queen: createBusinessLogicAgent(),
     defaultModel: model,
     defaultContext: { topic: null },
   });

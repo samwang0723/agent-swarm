@@ -1,4 +1,4 @@
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -17,11 +17,11 @@ interface Config {
 
 const config: Config = {
   anthropic: {
-    apiKey: process.env.ANTHROPIC_API_KEY || ""
+    apiKey: process.env.ANTHROPIC_API_KEY || '',
   },
   logging: {
-    level: process.env.LOG_LEVEL || "info"
-  }
+    level: process.env.LOG_LEVEL || 'info',
+  },
 };
 
 export default config;

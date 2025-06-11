@@ -11,7 +11,8 @@ import { loadSystemPrompt } from '@/messages/prompt';
 function createSwarm(model: LanguageModelV1) {
   const recommendationAgent = createMultiServiceAgent(
     ['restaurant-booking', 'time'],
-    loadSystemPrompt('restaurant-recommendation')
+    loadSystemPrompt('restaurant-recommendation') +
+      '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete restaurant recommendation ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.'
   );
 
   //   const browserBookingAgent = createMultiServiceAgent(
@@ -38,7 +39,7 @@ function createSwarm(model: LanguageModelV1) {
     name: 'Receptionist',
     description: 'Routes user queries to appropriate agents',
     instructions:
-      'You help users by routing them to the appropriate agent, DO NOT report all the handover steps, just report the final result.',
+      "You are a helpful receptionist. Provide a brief, friendly initial response acknowledging the user's request, then immediately transfer to the appropriate agent. Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently.",
     tools: {
       transfer_to_recommendation: {
         type: 'handover',
@@ -83,9 +84,12 @@ function logToolInformation(event: any) {
   if (event.toolResults?.length > 0) {
     logger.info(
       'Tool results:',
-      event.toolResults.map(
-        (tr: any) => `${tr.toolName}: ${JSON.stringify(tr.result)}`
-      )
+      event.toolResults.map((tr: any) => {
+        const jsonStr = JSON.stringify(tr.result);
+        const truncated =
+          jsonStr.length > 30 ? jsonStr.slice(0, 30) + '...' : jsonStr;
+        return `${tr.toolName}: ${truncated}`;
+      })
     );
   }
 }

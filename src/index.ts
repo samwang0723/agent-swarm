@@ -23,7 +23,7 @@ app.use(corsMiddleware);
 app.use('/', apiRouter);
 
 // Error handling middleware
-app.use((error: Error, req: Request, res: Response, next: any) => {
+app.use((error: Error, req: Request, res: Response) => {
   logger.error('Unhandled error:', error);
   res.status(500).json({
     error: 'Internal server error',

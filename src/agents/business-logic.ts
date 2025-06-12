@@ -56,8 +56,18 @@ export default function createBusinessLogicAgent() {
   const transferToReceptionist = {
     type: 'handover',
     description: 'Call this tool to transfer the call to the receptionist',
-    parameters: z.object({}),
-    execute: async () => ({ agent: receptionistAgent }),
+    parameters: z.object({
+      topic: z.string().describe('User requested topic'),
+    }),
+    execute: async ({ topic }: { topic: string }) => {
+      if (!receptionistAgent) {
+        throw new Error('Receptionist agent is not available');
+      }
+      return {
+        agent: receptionistAgent,
+        context: { topic },
+      };
+    },
   } as const;
 
   // Handover tool to transfer back to the receptionist agent

@@ -25,10 +25,15 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/jsonwebtoken": "^9.0.9",
     "agentswarm": "^0.1.3",
     "ai": "^4.3.16",
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
+    "googleapis": "^150.0.1",
+    "jsonwebtoken": "^9.0.2",
     "winston": "^3.17.0",
     "zod": "^3.25.56"
   },

@@ -4,18 +4,20 @@
 [![Node.js](https://img.shields.io/badge/Node.js-v20+-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue.svg)](https://www.typescriptlang.org/)
 
-A powerful AI Agent Swarm application built with TypeScript, featuring intelligent agent routing using the AgentSwarm framework, MCP (Model Context Protocol) tool integration, and unified output strategies for seamless AI interaction.
+A powerful AI Agent Swarm application built with TypeScript, featuring intelligent agent routing using the AgentSwarm framework, MCP (Model Context Protocol) tool integration, Google OAuth authentication, and unified output strategies for seamless AI interaction.
 
 ## 🚀 Features
 
 - **🤖 AgentSwarm Integration**: Built on the AgentSwarm framework with Hive/Swarm architecture
 - **👑 Queen Agent Pattern**: Business logic agent that routes to specialized worker agents
 - **🔌 MCP Tool Integration**: Extensible Model Context Protocol support for external services
-- **🌐 RESTful API Server**: Session-based API with streaming and non-streaming endpoints
-- **📚 Message History**: Persistent conversation history per session with tool call tracking
+- **🔐 Google OAuth Authentication**: Secure authentication with Google account integration and Gmail API access
+- **🌐 RESTful API Server**: User-based API with streaming and non-streaming endpoints
+- **📚 Message History**: Persistent conversation history per authenticated user with tool call tracking
 - **🎯 Unified Output Strategies**: Strategy pattern supporting SSE streaming and collected outputs
 - **⚡ Real-time Streaming**: Live AI response streaming with Server-Sent Events
-- **🍽️ Restaurant Booking**: Built-in restaurant search and booking capabilities with Playwright automation
+- **🍽️ Restaurant Booking**: Built-in restaurant search and booking capabilities
+- **📊 Interactive Web Interface**: Built-in web interface for easy testing and interaction
 - **🔧 TypeScript**: Full type safety and modern development experience
 - **📈 Extensible Architecture**: Easy to add new agents and MCP tools
 
@@ -44,6 +46,13 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
 - **Dynamic Tool Loading**: Tools are loaded dynamically from configured MCP servers
 - **Health Monitoring**: Continuous health checks for MCP server availability
 
+### Authentication System
+
+- **Google OAuth 2.0**: Secure authentication with Google accounts
+- **Gmail API Integration**: Access to Gmail for enhanced functionality
+- **Session Management**: JWT-based session tokens with cookie and Bearer token support
+- **CORS Protection**: Proper CORS configuration for web applications
+
 ### Output Strategy Pattern
 
 - **Unified Streaming**: Single source of truth for AI response generation
@@ -56,6 +65,7 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
 - Node.js v20 or higher
 - npm package manager
 - Anthropic API key
+- Google Cloud Console project with OAuth 2.0 credentials
 - MCP servers (optional, for extended functionality)
 
 ## 🛠️ Installation
@@ -75,17 +85,28 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
    make install
    ```
 
-3. **Set up environment variables**:
+3. **Set up Google OAuth**:
+   - Create a project in [Google Cloud Console](https://console.cloud.google.com/)
+   - Enable the Gmail API and Google+ API
+   - Create OAuth 2.0 credentials (Client ID and Client Secret)
+   - Add authorized redirect URIs: `http://localhost:3000/api/v1/auth/google/callback`
 
-   ```bash
-   cp .env.example .env
-   ```
+4. **Set up environment variables**:
 
-   Edit `.env` and add your configuration:
+   Create a `.env` file with your configuration:
 
-   ```
-   ANTHROPIC_API_KEY=your_api_key_here
+   ```env
+   # Anthropic API
+   ANTHROPIC_API_KEY=your_anthropic_api_key_here
+   
+   # Server Configuration
    PORT=3000
+   NODE_ENV=development
+   
+   # Google OAuth Configuration
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   GOOGLE_REDIRECT_URI=http://localhost:3000/api/v1/auth/google/callback
 
    # Restaurant Booking MCP Server
    RESTAURANT_BOOKING_MCP_URL=http://localhost:3000/mcp
@@ -102,73 +123,96 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
 
 ### Start the Application
 
-The application serves as both API server and can be used programmatically:
+The application serves as both API server and includes a web interface:
 
 ```bash
 npm run dev
 # or
-npm run api
+make dev
 ```
+
+The server will start on `http://localhost:3000` with:
+- **Web Interface**: `http://localhost:3000` - Interactive chat interface
+- **API Documentation**: `http://localhost:3000/api/v1/docs` - API documentation
+- **Authentication**: `http://localhost:3000/api/v1/auth/google` - Google OAuth login
+
+### Authentication Flow
+
+1. **Navigate to Google Auth**: `GET /api/v1/auth/google`
+2. **Complete OAuth Flow**: Redirected to Google for consent
+3. **Receive Session Token**: Callback provides session token
+4. **Use APIs**: Include token in Authorization header or as cookie
 
 ### HTTP API Server
 
-The server starts on `http://localhost:3000` with session-based endpoints:
+#### Authentication Endpoints
 
-#### Endpoints
+**GET /api/v1/auth/google**
+- Initiate Google OAuth authentication
+- Redirects to Google consent screen
 
-**POST /chat/session**
+**GET /api/v1/auth/google/callback**
+- Handle Google OAuth callback
+- Returns session token and user information
 
-- Create a new chat session
-- Response: `{ "sessionId": "uuid" }`
+#### Chat Endpoints (Require Authentication)
 
-**POST /chat/:sessionId/stream**
+**GET /api/v1/chat/history**
+- Get chat history for authenticated user
+- Headers: `Authorization: Bearer <token>` or session cookie
+- Response: `{ "userId": "string", "messageCount": number, "pairCount": number, "messages": [...] }`
 
+**DELETE /api/v1/chat/history**
+- Clear chat history for authenticated user
+- Headers: `Authorization: Bearer <token>` or session cookie
+- Response: `{ "message": "History cleared", "userId": "string" }`
+
+**POST /api/v1/chat/stream**
 - Streaming chat endpoint with Server-Sent Events (SSE)
+- Headers: `Authorization: Bearer <token>` or session cookie
 - Request body: `{ "message": "your message" }`
 - Response: SSE stream with real-time AI responses
 
-**POST /chat/:sessionId**
-
+**POST /api/v1/chat**
 - Non-streaming chat endpoint
+- Headers: `Authorization: Bearer <token>` or session cookie
 - Request body: `{ "message": "your message" }`
-- Response: `{ "sessionId": "uuid", "response": "complete AI response", "messageCount": number }`
+- Response: `{ "response": "complete AI response", "messageCount": number }`
 
-**GET /chat/:sessionId/history**
+#### System Endpoints
 
-- Get chat history for a session
-- Response: `{ "sessionId": "uuid", "messageCount": number, "pairCount": number, "messages": [...] }`
-
-**DELETE /chat/:sessionId/history**
-
-- Clear chat history for a session
-- Response: `{ "message": "History cleared", "sessionId": "uuid" }`
-
-**GET /health**
-
+**GET /api/v1/health**
 - Health check endpoint with MCP server status
 - Response: `{ "status": "ok", "timestamp": "ISO-date", "mcp": {...}, "tools": {...} }`
 
 ### Example API Usage
 
 ```bash
-# Create a new session
-curl -X POST http://localhost:3000/chat/session
+# 1. Authenticate with Google (opens browser)
+curl http://localhost:3000/api/v1/auth/google
+
+# 2. Use the session token from callback in subsequent requests
+TOKEN="your_session_token_here"
 
 # Streaming chat
-curl -X POST http://localhost:3000/chat/session-123/stream \
+curl -X POST http://localhost:3000/api/v1/chat/stream \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"message": "Find me a romantic restaurant for a date tonight in Taipei"}'
 
 # Non-streaming chat
-curl -X POST http://localhost:3000/chat/session-123 \
+curl -X POST http://localhost:3000/api/v1/chat \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello, Claude!"}'
 
 # Get chat history
-curl http://localhost:3000/chat/session-123/history
+curl -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/v1/chat/history
 
 # Clear chat history
-curl -X DELETE http://localhost:3000/chat/session-123/history
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/v1/chat/history
 ```
 
 ## 🤖 Agent System
@@ -255,7 +299,6 @@ const prompt = loadSystemPrompt('restaurant-recommendation');
 ```
 
 Available prompts:
-
 - `restaurant-recommendation.txt` - For restaurant recommendation agents
 - `browser-booking.txt` - For browser-based booking automation
 
@@ -264,23 +307,13 @@ Available prompts:
 ### Available MCP Servers
 
 #### Restaurant Booking Tools
-
 - **search_restaurants**: Search for restaurants based on location, cuisine, mood, and event type
 - **get_restaurant_details**: Get detailed information about specific restaurants
 - **get_booking_instructions**: Get reservation instructions for restaurants
 - **check_availability**: Check reservation availability
 - **make_reservation**: Attempt to make restaurant reservations
 
-#### Playwright Browser Tools
-
-- **playwright_navigate**: Navigate to URLs
-- **playwright_click**: Click elements on pages
-- **playwright_fill**: Fill form inputs
-- **playwright_screenshot**: Take screenshots
-- **And many more browser automation tools**
-
 #### Time Tools
-
 - Basic time and date utilities
 
 ### MCP Server Configuration
@@ -312,6 +345,15 @@ export const mcpServers: McpServerConfig[] = [
 
 ```
 src/
+├── routes/
+│   ├── index.ts              # API route definitions and versioning
+│   ├── auth.ts              # Google OAuth authentication routes
+│   ├── chat.ts              # Chat endpoints with authentication
+│   ├── health.ts            # Health check and system status
+│   └── README.md            # API documentation
+├── middleware/
+│   ├── auth.ts              # Authentication middleware and session management
+│   └── cors.ts              # CORS configuration
 ├── agents/
 │   ├── index.ts              # Agent creation factories and types
 │   ├── convert.ts           # MCP tool to agent tool conversion
@@ -332,7 +374,9 @@ src/
 │   └── prompts/             # System prompt files
 ├── utils/
 │   └── logger.ts            # Winston-based logging utility
-└── index.ts                 # Unified API server entry point
+└── index.ts                 # Express server with authentication
+public/
+└── index.html               # Interactive web interface
 ```
 
 ## ➕ Adding New Agents with MCP Tools
@@ -340,7 +384,6 @@ src/
 ### Step 1: Set Up Your MCP Server
 
 First, ensure your MCP server is running and accessible. Your MCP server should expose:
-
 - `/mcp` endpoint for tool definitions and execution
 - `/health` endpoint for health checks
 
@@ -365,7 +408,7 @@ export const mcpServers: McpServerConfig[] = [
 
 Update your `.env` file:
 
-```
+```env
 YOUR_SERVICE_MCP_URL=http://localhost:3003/mcp
 YOUR_SERVICE_MCP_HEALTH_URL=http://localhost:3003/health
 YOUR_SERVICE_MCP_ENABLED=true
@@ -443,7 +486,8 @@ const receptionistAgent = new Agent<ChatContext>({
 
 1. Start your MCP server
 2. Run the agent swarm: `npm run dev`
-3. Test queries related to your service domain using the API endpoints
+3. Authenticate via Google OAuth
+4. Test queries related to your service domain using the web interface or API endpoints
 
 ## 🔧 Development
 
@@ -459,6 +503,8 @@ make build
 
 ```bash
 npm run dev
+# or
+make dev
 ```
 
 ### Run tests
@@ -494,7 +540,7 @@ The application uses a Strategy Pattern for handling different output methods:
 
 ### Available Strategies
 
-- **SSEOutput**: Server-Sent Events for web streaming with session management
+- **SSEOutput**: Server-Sent Events for web streaming with user session management
 - **CollectOutput**: Collect complete responses for non-streaming APIs
 
 ### Creating Custom Output Strategies
@@ -509,11 +555,11 @@ export class CustomOutput implements OutputStrategy {
     // Handle streaming chunks
   }
 
-  onStart?(data: { sessionId: string; streaming: boolean }): void {
+  onStart?(data: { userId: string; streaming: boolean }): void {
     // Handle stream start
   }
 
-  onFinish?(data: { complete: boolean; sessionId: string }): void {
+  onFinish?(data: { complete: boolean; userId: string }): void {
     // Handle stream completion
   }
 
@@ -532,13 +578,22 @@ export class CustomOutput implements OutputStrategy {
 Unified function for sending messages to the AgentSwarm.
 
 **Parameters:**
-
 - `model`: LanguageModelV1 - The AI model instance
 - `message`: string - User message
-- `userId`: string - Session identifier
+- `userId`: string - User identifier (from authentication)
 - `outputStrategy`: OutputStrategy - Output handling strategy
 
 **Returns:** Promise with message history and new response
+
+### Authentication
+
+#### `requireAuth` - Authentication Middleware
+
+Protects routes requiring authentication. Supports both Bearer tokens and session cookies.
+
+#### `optionalAuth` - Optional Authentication Middleware
+
+Allows both authenticated and unauthenticated requests.
 
 ### Tool Registry
 
@@ -562,30 +617,32 @@ Get list of all available tool names.
 
 ### Common Issues
 
-1. **MCP Server Connection Failed**
+1. **Google OAuth Configuration**
+   - Verify Google Client ID and Secret in environment variables
+   - Check redirect URI matches Google Console configuration
+   - Ensure Gmail API is enabled in Google Cloud Console
 
+2. **Authentication Issues**
+   - Check if session token is included in requests
+   - Verify Bearer token format: `Authorization: Bearer <token>`
+   - Check cookie configuration for browser-based requests
+
+3. **MCP Server Connection Failed**
    - Check if your MCP server is running
    - Verify the URL and health endpoint in `src/config/mcp.ts`
    - Check firewall and network settings
    - Review logs for connection errors
 
-2. **Agent Not Routing Correctly**
-
+4. **Agent Not Routing Correctly**
    - Verify the transfer function in the business logic agent
    - Check system prompts and instructions
    - Review logs for routing decisions and tool calls
 
-3. **Tools Not Available**
-
+5. **Tools Not Available**
    - Check MCP server configuration in `src/config/mcp.ts`
    - Verify environment variables
-   - Check tool registry status: `GET /health` endpoint
+   - Check tool registry status: `GET /api/v1/health` endpoint
    - Review MCP server health endpoints
-
-4. **Session Management Issues**
-   - Ensure you're using the correct session ID format
-   - Check that sessions are being created via `POST /chat/session`
-   - Review message history with `GET /chat/:sessionId/history`
 
 ### Debug Mode
 
@@ -595,10 +652,10 @@ Enable debug logging by setting log level:
 DEBUG=* npm run dev
 ```
 
-Check the `/health` endpoint for detailed system status:
+Check the `/api/v1/health` endpoint for detailed system status:
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3000/api/v1/health
 ```
 
 ## 🤝 Contributing
@@ -619,6 +676,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Powered by [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) framework
 - MCP (Model Context Protocol) integration for extensible tool support
 - Express.js for HTTP API server functionality
+- Google OAuth 2.0 for secure authentication
 
 ---
 

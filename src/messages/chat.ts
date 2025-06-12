@@ -82,7 +82,28 @@ async function handleResponseMessages(userId: string, result: any) {
   try {
     const responseMessages = await result.messages;
     if (responseMessages?.length > 0) {
-      messageHistory.addToolMessages(userId, responseMessages);
+      // Filter and fix empty assistant messages to prevent LLM errors during agent handover
+      const processedMessages = responseMessages.map((message: any) => {
+        if (
+          message.role === 'assistant' &&
+          Array.isArray(message.content) &&
+          message.content.length === 0
+        ) {
+          // Replace empty assistant message with agent handover message
+          return {
+            ...message,
+            content: [
+              {
+                type: 'text',
+                text: 'agent handover',
+              },
+            ],
+          };
+        }
+        return message;
+      });
+
+      messageHistory.addToolMessages(userId, processedMessages);
     }
   } catch (error) {
     logger.error('Error adding response messages to history:', error);

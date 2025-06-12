@@ -6,6 +6,8 @@ import { Hive, Swarm } from 'agentswarm';
 import { ChatContext } from '@/agents';
 import createBusinessLogicAgent from '@/agents/business-logic';
 
+import { toolRegistry } from '@/tools';
+
 // Cache for swarms to persist across messages
 const swarmCache = new Map<string, Swarm<ChatContext>>();
 
@@ -155,7 +157,8 @@ export async function sendMessage(
   model: LanguageModelV1,
   message: string,
   userId: string,
-  outputStrategy: OutputStrategy
+  outputStrategy: OutputStrategy,
+  accessToken?: string // Add optional access token parameter
 ) {
   // Add user message to history and get current history
   messageHistory.addUserMessage(userId, message);
@@ -169,6 +172,11 @@ export async function sendMessage(
   }
 
   try {
+    // Set access token on tool registry before swarm execution
+    if (accessToken) {
+      toolRegistry.setAccessTokenForAll(accessToken);
+    }
+
     const result = swarm.streamText({
       messages: history,
       returnToQueen: true,

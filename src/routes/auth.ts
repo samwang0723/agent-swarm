@@ -181,7 +181,11 @@ router.get(
         };
         logger.info('User info retrieved via Google API client');
       } catch (apiError) {
-        logger.warn('Google API client failed, trying direct fetch:', apiError);
+        logger.warn('Google API client failed, trying direct fetch:', {
+          error:
+            apiError instanceof Error ? apiError.message : String(apiError),
+          stack: apiError instanceof Error ? apiError.stack : undefined,
+        });
 
         // Fallback to direct fetch with access token
         if (tokens.access_token) {
@@ -233,6 +237,7 @@ router.get(
         name: userInfo.name || undefined,
         picture: userInfo.picture || undefined,
         sessionId: chatSessionId, // Include chat session ID
+        accessToken: tokens.access_token || undefined, // Store Google access token
       };
 
       // Generate session token and store user with session info

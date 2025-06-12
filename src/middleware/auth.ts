@@ -8,6 +8,7 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     name?: string;
     picture?: string;
+    accessToken?: string; // OAuth access token for external API calls
   };
 }
 
@@ -24,6 +25,7 @@ const userSessions = new Map<
     email: string;
     name?: string;
     picture?: string;
+    accessToken?: string;
     createdAt: Date;
   }
 >();
@@ -38,6 +40,7 @@ export const storeUserSession = (
     email: string;
     name?: string;
     picture?: string;
+    accessToken?: string;
   }
 ) => {
   userSessions.set(token, {

@@ -154,7 +154,13 @@ router.post('/stream', requireAuth, async (req, res: Response) => {
     const sseOutput = new SSEOutput(res, userId);
 
     // Use the unified sendMessage function with SSE output
-    await sendMessage(model, message, userId, sseOutput);
+    await sendMessage(
+      model,
+      message,
+      userId,
+      sseOutput,
+      authReq.user.accessToken
+    );
   } catch (error) {
     logger.error('Chat error:', error);
     const errorMessage =
@@ -241,7 +247,13 @@ router.post('/', requireAuth, async (req, res: Response) => {
     })();
 
     // Use the unified sendMessage function with collect output
-    await sendMessage(model, message, userId, collectOutput);
+    await sendMessage(
+      model,
+      message,
+      userId,
+      collectOutput,
+      authReq.user.accessToken
+    );
 
     res.json({
       userId,

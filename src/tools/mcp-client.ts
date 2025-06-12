@@ -7,19 +7,29 @@ export interface McpServerConfig {
   url: string;
   healthUrl?: string;
   enabled: boolean;
+  requiresAuth?: boolean; // Whether this MCP server requires authentication
 }
 
 export interface McpTool {
   name: string;
   description: string;
   inputSchema: any;
+  requiresAuth?: boolean; // Whether this specific tool requires authentication
 }
 
 export class McpClient {
   private sessionId: string | null = null;
   private availableTools: McpTool[] = [];
+  private accessToken: string | null = null;
 
   constructor(private config: McpServerConfig) {}
+
+  /**
+   * Set the OAuth access token for authenticated requests
+   */
+  setAccessToken(token: string | null): void {
+    this.accessToken = token;
+  }
 
   async initialize(): Promise<void> {
     if (!this.config.enabled) {
@@ -153,18 +163,41 @@ export class McpClient {
     );
   }
 
-  async callTool(name: string, parameters: any): Promise<any> {
+  async callTool(
+    name: string,
+    parameters: any,
+    requiresAuth?: boolean
+  ): Promise<any> {
     if (!this.sessionId) {
       throw new Error('MCP session not initialized');
     }
 
+    // Check if authentication is required
+    const needsAuth =
+      requiresAuth ||
+      this.config.requiresAuth ||
+      this.availableTools.find(t => t.name === name)?.requiresAuth;
+
+    if (needsAuth && !this.accessToken) {
+      throw new Error(
+        `Tool '${name}' requires authentication but no access token provided`
+      );
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'mcp-session-id': this.sessionId,
+    };
+
+    // Add authorization header if needed
+    if (needsAuth && this.accessToken) {
+      headers['Authorization'] = `Bearer ${this.accessToken}`;
+    }
+
     const response = await fetch(this.config.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json, text/event-stream',
-        'mcp-session-id': this.sessionId,
-      },
+      headers,
       body: JSON.stringify({
         jsonrpc: '2.0',
         method: 'tools/call',
@@ -207,7 +240,11 @@ export class McpClient {
       description: mcpTool.description,
       parameters: this.convertInputSchemaToZod(mcpTool.inputSchema),
       execute: async parameters => {
-        return await this.callTool(mcpTool.name, parameters);
+        return await this.callTool(
+          mcpTool.name,
+          parameters,
+          mcpTool.requiresAuth
+        );
       },
     }));
   }

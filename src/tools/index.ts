@@ -99,6 +99,30 @@ export class ToolRegistry {
   getStatus(): Record<string, { connected: boolean; toolCount: number }> {
     return this.mcpRegistry.getStatus();
   }
+
+  /**
+   * Set access token for all MCP clients that require authentication
+   */
+  setAccessTokenForAll(accessToken: string | null): void {
+    this.mcpRegistry.setAccessTokenForAll(accessToken);
+  }
+
+  /**
+   * Set access token for a specific MCP server
+   */
+  setAccessTokenForServer(
+    serverName: string,
+    accessToken: string | null
+  ): void {
+    this.mcpRegistry.setAccessTokenForServer(serverName, accessToken);
+  }
+
+  /**
+   * Get MCP client for a specific server (for direct access if needed)
+   */
+  getClient(serverName: string): any {
+    return this.mcpRegistry.getClient(serverName);
+  }
 }
 
 // Export singleton instance

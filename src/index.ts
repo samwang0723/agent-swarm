@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cookieParser from 'cookie-parser';
 import { apiRouter } from './routes';
 import { corsMiddleware } from './middleware/cors';
@@ -23,7 +23,8 @@ app.use(corsMiddleware);
 app.use('/', apiRouter);
 
 // Error handling middleware
-app.use((error: Error, req: Request, res: Response) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
   logger.error('Unhandled error:', error);
   res.status(500).json({
     error: 'Internal server error',

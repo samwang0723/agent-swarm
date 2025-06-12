@@ -188,4 +188,36 @@ export class McpRegistry {
 
     return status;
   }
+
+  /**
+   * Set access token for all MCP clients that require authentication
+   */
+  setAccessTokenForAll(accessToken: string | null): void {
+    this.clients.forEach((client, serverName) => {
+      const config = this.configs.find(c => c.name === serverName);
+      if (config?.requiresAuth) {
+        client.setAccessToken(accessToken);
+      }
+    });
+  }
+
+  /**
+   * Set access token for a specific MCP server
+   */
+  setAccessTokenForServer(
+    serverName: string,
+    accessToken: string | null
+  ): void {
+    const client = this.clients.get(serverName);
+    if (client) {
+      client.setAccessToken(accessToken);
+    }
+  }
+
+  /**
+   * Get MCP client for a specific server (for direct access if needed)
+   */
+  getClient(serverName: string): any {
+    return this.clients.get(serverName);
+  }
 }

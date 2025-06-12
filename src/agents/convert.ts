@@ -1,14 +1,17 @@
 import { Tool } from 'ai';
 import { AgentFunctionTool } from 'agentswarm';
 import logger from '@utils/logger';
+import { toolRegistry } from '@tools/index';
 
 /**
  * Converts serverTools (Tool objects from 'ai' library) to AgentFunctionTool format
  * @param serverTools - Record of Tool objects from MCP servers
+ * @param serverName - Name of the MCP server (for token injection)
  * @returns Record of AgentFunctionTool objects
  */
 export function convertToAgentTools(
-  serverTools: Record<string, Tool>
+  serverTools: Record<string, Tool>,
+  serverName?: string
 ): Record<string, AgentFunctionTool> {
   const agentTools: Record<string, AgentFunctionTool> = {};
 
@@ -17,8 +20,16 @@ export function convertToAgentTools(
       type: 'function' as const,
       description: tool.description,
       parameters: tool.parameters as any, // Cast to Parameters type
-      execute: async (args: any) => {
+      execute: async (args: any, options: any) => {
         try {
+          // Inject access token from context if available
+          if (serverName && options?.context?.accessToken) {
+            toolRegistry.setAccessTokenForServer(
+              serverName,
+              options.context.accessToken
+            );
+          }
+
           // The original tool.execute expects both args and ToolExecutionOptions
           if (tool.execute) {
             // Create minimal ToolExecutionOptions object
@@ -59,7 +70,7 @@ export function convertMultiServerToAgentTools(
   const combinedTools: Record<string, AgentFunctionTool> = {};
 
   for (const [serverName, serverTools] of Object.entries(toolsByServer)) {
-    const convertedTools = convertToAgentTools(serverTools);
+    const convertedTools = convertToAgentTools(serverTools, serverName);
 
     // Add server prefix to avoid naming conflicts
     for (const [toolName, toolConfig] of Object.entries(convertedTools)) {

@@ -4,6 +4,7 @@ import { convertToAgentTools, convertMultiServerToAgentTools } from './convert';
 
 export interface ChatContext {
   topic: string | null;
+  accessToken?: string; // User's OAuth access token for MCP services
 }
 
 // Using tools from multiple servers
@@ -90,7 +91,7 @@ const createSinglePurposeAgent = (
 
   const serverTools = toolRegistry.getServerTools(serverName);
   const toolNames = toolRegistry.getServerToolNames(serverName);
-  const convertedTools = convertToAgentTools(serverTools);
+  const convertedTools = convertToAgentTools(serverTools, serverName);
 
   return new Agent<ChatContext>({
     name: agentName || `${serverName}-agent`,

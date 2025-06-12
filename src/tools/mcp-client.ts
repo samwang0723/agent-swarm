@@ -288,7 +288,14 @@ export class McpClient {
         zodType = zodType.describe(property.description);
       }
 
-      if (!schema.required?.includes(key)) {
+      // OpenAI is stricter about required fields - if a property has a default value,
+      // it can be optional, otherwise treat it as required for OpenAI compatibility
+      const isRequired =
+        schema.required?.includes(key) ||
+        (property.default === undefined &&
+          !Object.prototype.hasOwnProperty.call(property, 'default'));
+
+      if (!isRequired) {
         zodType = zodType.optional();
       }
 

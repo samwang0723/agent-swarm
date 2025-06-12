@@ -44,7 +44,7 @@ export default function createBusinessLogicAgent() {
   const transferToRecommendation = {
     type: 'handover',
     description:
-      'Call this tool to transfer the call to the recommendation agent',
+      'Call this tool to transfer the call to the restaurant recommendation agent. This agent can only handle restaurant related queries.',
     parameters: z.object({
       topic: z.string().describe('Restaurant preference topic'),
     }),
@@ -61,7 +61,8 @@ export default function createBusinessLogicAgent() {
 
   const transferToGoogleAssistant = {
     type: 'handover',
-    description: 'Call this tool to transfer the call to the google assistant',
+    description:
+      'Call this tool to transfer the call to the google gmail assistant. This agent can only handle gmail related queries.',
     parameters: z.object({
       topic: z.string().describe('User requested topic'),
     }),

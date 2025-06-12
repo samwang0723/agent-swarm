@@ -14,7 +14,7 @@ ROLE:
 - **Purpose**: Retrieve a list of messages from the user's mailbox
 - **Parameters**: 
   - `query` (optional): Gmail search query string
-  - `max_results` (optional): Maximum number of messages to return (default: 100)
+  - `max_results` (optional): Maximum number of messages to return (default: 10)
   - `label_ids` (optional): Array of label IDs to filter by
 
 ### 2. Get Email

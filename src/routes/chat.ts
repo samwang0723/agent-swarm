@@ -4,7 +4,8 @@ import { sendMessage } from '@messages/chat';
 import { SSEOutput } from '@messages/output-strategies';
 import { OutputStrategy } from '@messages/types';
 import logger from '@utils/logger';
-import { createAnthropic } from '@ai-sdk/anthropic';
+// import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import dotenv from 'dotenv';
 
@@ -12,13 +13,22 @@ dotenv.config();
 
 const router: Router = express.Router();
 
-const anthropic = createAnthropic({
-  baseURL: 'https://api.anthropic.com/v1',
-  apiKey: process.env.ANTHROPIC_API_KEY,
+// const anthropic = createAnthropic({
+//   baseURL: 'https://api.anthropic.com/v1',
+//   apiKey: process.env.ANTHROPIC_API_KEY,
+// });
+
+// const MODEL = 'claude-3-5-sonnet-20241022';
+// const model = anthropic(MODEL);
+
+const openai = createOpenAI({
+  baseURL: 'https://api.openai.com/v1',
+  apiKey: process.env.OPENAI_API_KEY,
+  compatibility: 'strict',
 });
 
-const MODEL = 'claude-3-5-sonnet-20241022';
-const model = anthropic(MODEL);
+const MODEL = 'gpt-4o';
+const model = openai(MODEL);
 
 /**
  * @swagger

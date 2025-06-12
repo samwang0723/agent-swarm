@@ -6,6 +6,9 @@
 
 A powerful AI Agent Swarm application built with TypeScript, featuring intelligent agent routing using the AgentSwarm framework, MCP (Model Context Protocol) tool integration, Google OAuth authentication, and unified output strategies for seamless AI interaction.
 
+![Screenshot 2025-06-12 at 4 55 46 PM](https://github.com/user-attachments/assets/42b1661a-1e4e-495d-8d85-d9e8fb83f566)
+
+
 ## 🚀 Features
 
 - **🤖 AgentSwarm Integration**: Built on the AgentSwarm framework with Hive/Swarm architecture

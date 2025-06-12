@@ -2,13 +2,27 @@ import { loadSystemPrompt } from '@/messages/prompt';
 import { ChatContext, createMultiServiceAgent } from '.';
 import { Agent } from 'agentswarm';
 import { z } from 'zod';
+import logger from '@/utils/logger';
 
 export default function createBusinessLogicAgent() {
-  const recommendationAgent = createMultiServiceAgent(
-    ['restaurant-booking', 'time'],
-    loadSystemPrompt('restaurant-recommendation') +
-      '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete restaurant recommendation ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.'
-  );
+  let recommendationAgent;
+
+  try {
+    logger.info(
+      'Creating recommendation agent with MCP servers: restaurant-booking, time'
+    );
+    recommendationAgent = createMultiServiceAgent(
+      ['restaurant-booking', 'time'],
+      loadSystemPrompt('restaurant-recommendation') +
+        '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete restaurant recommendation ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.'
+    );
+    logger.info('Recommendation agent created successfully');
+  } catch (error) {
+    logger.error('Failed to create recommendation agent:', error);
+    throw new Error(
+      `Failed to create recommendation agent: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 
   const transferToRecommendation = {
     type: 'handover',
@@ -17,7 +31,15 @@ export default function createBusinessLogicAgent() {
     parameters: z.object({
       topic: z.string().describe('Restaurant preference topic'),
     }),
-    execute: async () => ({ agent: recommendationAgent }),
+    execute: async ({ topic }: { topic: string }) => {
+      if (!recommendationAgent) {
+        throw new Error('Recommendation agent is not available');
+      }
+      return {
+        agent: recommendationAgent,
+        context: { topic },
+      };
+    },
   } as const;
 
   // Receptionist top-level agent

@@ -19,8 +19,6 @@ export function convertToAgentTools(
       parameters: tool.parameters as any, // Cast to Parameters type
       execute: async (args: any) => {
         try {
-          logger.info(`Executing tool: ${toolName} with args:`, args);
-
           // The original tool.execute expects both args and ToolExecutionOptions
           if (tool.execute) {
             // Create minimal ToolExecutionOptions object
@@ -31,14 +29,12 @@ export function convertToAgentTools(
             };
 
             const result = await tool.execute(args, toolOptions);
-            logger.info(`Tool ${toolName} executed successfully`);
 
             // Ensure we return the result in a consistent format
             return { result: result, context: {} };
           }
 
           const error = `Tool ${toolName} has no execute function`;
-          logger.error(error);
           throw new Error(error);
         } catch (error) {
           logger.error(`Error executing tool ${toolName}:`, error);

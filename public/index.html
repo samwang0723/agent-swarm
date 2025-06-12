@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Agent Swarm Streaming Chat Demo</title>
+    <title>Agent Swarm</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <style>
@@ -25,7 +25,7 @@
       .container {
         background: white;
         padding: 30px;
-        border-radius: 20px;
+        border-radius: 10px;
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
         backdrop-filter: blur(10px);
         border: 1px solid rgba(255, 255, 255, 0.2);
@@ -46,7 +46,7 @@
         padding: 20px;
         margin: 25px 0;
         background: #fafbfc;
-        border-radius: 15px;
+        border-radius: 10px;
         box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
         scroll-behavior: smooth;
       }
@@ -130,7 +130,7 @@
         align-items: center;
         background: white;
         padding: 8px;
-        border-radius: 25px;
+        border-radius: 15px;
         border: 2px solid #e1e8ed;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         transition: all 0.3s ease;
@@ -141,14 +141,34 @@
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
       }
 
-      input[type='text'] {
+      textarea {
         flex: 1;
         padding: 12px 20px;
         border: none;
-        border-radius: 20px;
+        border-radius: 8px;
         font-size: 16px;
         outline: none;
         background: transparent;
+        resize: none;
+        min-height: 20px;
+        max-height: 120px;
+        line-height: 1.4;
+        font-family: inherit;
+        overflow-y: auto;
+        transition: height 0.2s ease;
+      }
+
+      textarea::-webkit-scrollbar {
+        width: 4px;
+      }
+
+      textarea::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      textarea::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 2px;
       }
 
       button {
@@ -162,6 +182,16 @@
         font-weight: 500;
         transition: all 0.3s ease;
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+      }
+
+      /* Icon buttons in input container */
+      .input-container button {
+        padding: 12px 16px;
+        min-width: 44px;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       button:hover:not(:disabled) {
@@ -261,6 +291,10 @@
       .session-controls {
         text-align: center;
         margin-bottom: 20px;
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
       }
 
       /* Markdown formatting styles with better spacing */
@@ -440,11 +474,14 @@
   </head>
   <body>
     <div class="container">
-      <h1>🤖 Streaming Chat API Demo</h1>
+      <h1>Agent Swarm</h1>
 
       <div class="session-controls">
         <button onclick="createSession()" id="createSessionBtn">
           Create New Session
+        </button>
+        <button onclick="clearHistory()" id="clearBtn" disabled>
+          Clear History
         </button>
       </div>
 
@@ -464,14 +501,20 @@
       <div class="chat-container" id="chatContainer"></div>
 
       <div class="input-container">
-        <input
-          type="text"
+        <textarea
           id="messageInput"
           placeholder="Type your message..."
           disabled
-        />
-        <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
-        <button onclick="clearHistory()" id="clearBtn" disabled>Clear</button>
+          rows="1"
+        ></textarea>
+        <button
+          onclick="sendMessage()"
+          id="sendBtn"
+          disabled
+          title="Send message"
+        >
+          ➤
+        </button>
       </div>
     </div>
 
@@ -613,7 +656,7 @@
         document.getElementById('sendBtn').disabled = true;
         document.getElementById('messageInput').disabled = true;
 
-        updateStatus('Claude is typing...', 'info');
+        updateStatus('Agent thinking...', 'info');
 
         try {
           // Create streaming message placeholder
@@ -698,14 +741,36 @@
         }
       }
 
-      // Enter key to send message
-      document
-        .getElementById('messageInput')
-        .addEventListener('keypress', function (e) {
-          if (e.key === 'Enter' && !isStreaming) {
+      // Auto-resize textarea function
+      function autoResizeTextarea(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+      }
+
+      // Setup textarea auto-resize and keyboard handling
+      document.addEventListener('DOMContentLoaded', function () {
+        const messageInput = document.getElementById('messageInput');
+
+        // Auto-resize on input
+        messageInput.addEventListener('input', function () {
+          autoResizeTextarea(this);
+        });
+
+        // Handle Enter key (send message) and Shift+Enter (new line)
+        messageInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && !e.shiftKey && !isStreaming) {
+            e.preventDefault();
             sendMessage();
           }
         });
+
+        // Reset height when input is cleared
+        messageInput.addEventListener('blur', function () {
+          if (!this.value.trim()) {
+            this.style.height = 'auto';
+          }
+        });
+      });
     </script>
   </body>
 </html>

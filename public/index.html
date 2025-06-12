@@ -736,24 +736,52 @@
       <!-- Authentication Section -->
       <div class="auth-section" id="authSection">
         <div id="loginSection">
-          <p style="margin: 0 0 16px 0; color: #64748b; font-size: 14px; font-weight: 500;">
+          <p
+            style="
+              margin: 0 0 16px 0;
+              color: #64748b;
+              font-size: 14px;
+              font-weight: 500;
+            "
+          >
             Sign in to access Agent Swarm
           </p>
-          <button onclick="loginWithGoogle()" class="google-login-btn" id="googleLoginBtn">
+          <button
+            onclick="loginWithGoogle()"
+            class="google-login-btn"
+            id="googleLoginBtn"
+          >
             <svg class="google-icon" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+              />
             </svg>
             Continue with Google
           </button>
         </div>
-        
+
         <div id="userSection" class="hidden">
           <div class="user-controls-row">
             <div class="user-info">
-              <img id="userAvatar" class="user-avatar" src="" alt="User Avatar">
+              <img
+                id="userAvatar"
+                class="user-avatar"
+                src=""
+                alt="User Avatar"
+              />
               <div class="user-details">
                 <div id="userEmail"></div>
               </div>
@@ -762,9 +790,7 @@
               <button onclick="clearHistory()" id="clearBtn" class="action-btn">
                 Clear History
               </button>
-              <button onclick="logout()" class="logout-btn">
-                Logout
-              </button>
+              <button onclick="logout()" class="logout-btn">Logout</button>
             </div>
           </div>
         </div>
@@ -827,14 +853,14 @@
           updateStatus('Logging out...', 'info');
           const response = await fetch('/api/v1/auth/logout', {
             method: 'POST',
-            credentials: 'include'
+            credentials: 'include',
           });
-          
+
           if (response.ok) {
             currentUser = null;
             updateAuthUI();
             updateStatus('Logged out successfully', 'success');
-            
+
             // Clear chat
             document.getElementById('chatContainer').innerHTML = '';
             document.getElementById('latencyIndicator').style.display = 'none';
@@ -852,31 +878,34 @@
         try {
           console.log('=== AUTH CHECK DEBUG ===');
           const response = await fetch('/api/v1/auth/me', {
-            credentials: 'include'
+            credentials: 'include',
           });
-          
+
           console.log('Auth response status:', response.status);
           console.log('Auth response ok:', response.ok);
-          
+
           if (response.ok) {
             const userData = await response.json();
-            console.log('Raw user data from /me endpoint:', JSON.stringify(userData, null, 2));
-            
+            console.log(
+              'Raw user data from /me endpoint:',
+              JSON.stringify(userData, null, 2)
+            );
+
             currentUser = userData;
             updateAuthUI();
             updateStatus('Welcome back! Ready to chat.', 'success');
-            
+
             // Enable chat controls when authenticated
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
           } else {
             const errorData = await response.text();
             console.log('Auth check failed with response:', errorData);
-            
+
             currentUser = null;
             updateAuthUI();
             updateStatus('Please sign in to continue', 'info');
-            
+
             // Disable chat controls when not authenticated
             document.getElementById('messageInput').disabled = true;
             document.getElementById('sendBtn').disabled = true;
@@ -886,7 +915,7 @@
           currentUser = null;
           updateAuthUI();
           updateStatus('Please sign in to continue', 'info');
-          
+
           // Disable chat controls on error
           document.getElementById('messageInput').disabled = true;
           document.getElementById('sendBtn').disabled = true;
@@ -896,44 +925,62 @@
       function updateAuthUI() {
         const loginSection = document.getElementById('loginSection');
         const userSection = document.getElementById('userSection');
-        
-        console.log('updateAuthUI called:', { 
-          currentUser: currentUser, 
-          loginSection: !!loginSection, 
-          userSection: !!userSection 
+
+        console.log('updateAuthUI called:', {
+          currentUser: currentUser,
+          loginSection: !!loginSection,
+          userSection: !!userSection,
         });
-        
+
         // Add detailed debugging for currentUser data
         if (currentUser) {
           console.log('=== USER DATA DEBUG ===');
-          console.log('Full currentUser object:', JSON.stringify(currentUser, null, 2));
+          console.log(
+            'Full currentUser object:',
+            JSON.stringify(currentUser, null, 2)
+          );
           console.log('currentUser.email:', currentUser.email);
           console.log('currentUser.picture:', currentUser.picture);
-          console.log('Email element exists:', !!document.getElementById('userEmail'));
-          console.log('Avatar element exists:', !!document.getElementById('userAvatar'));
+          console.log(
+            'Email element exists:',
+            !!document.getElementById('userEmail')
+          );
+          console.log(
+            'Avatar element exists:',
+            !!document.getElementById('userAvatar')
+          );
         }
-        
+
         if (currentUser) {
           console.log('User is authenticated, showing user section');
           // Show user info, hide login
           loginSection.classList.add('hidden');
           userSection.classList.remove('hidden');
-          
+
           // Update user info - only email, no name
           const emailElement = document.getElementById('userEmail');
           const avatarElement = document.getElementById('userAvatar');
-          
+
           if (emailElement) {
-            const displayText = currentUser.email || currentUser.name || currentUser.id || 'No user info available';
+            const displayText =
+              currentUser.email ||
+              currentUser.name ||
+              currentUser.id ||
+              'No user info available';
             emailElement.textContent = displayText;
             console.log('Email element updated with:', displayText);
           } else {
             console.error('Email element not found!');
           }
-          
+
           if (avatarElement) {
-            avatarElement.src = currentUser.picture || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2NjdlZWEiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4PSI4IiB5PSI4Ij4KPHBhdGggZD0iTTggMTJDMTAuMjA5MSAxMiAxMiAxMC4yMDkxIDEyIDhDMTIgNS43OTA5IDEwLjIwOTEgNCA4IDRDNS43OTA5IDQgNCA1Ljc5MDkgNCA4QzQgMTAuMjA5MSA1Ljc5MDkgMTIgOCAxMloiIGZpbGw9IndoaXRlIi8+CjwvZz4KPC9zdmc+';
-            console.log('Avatar element updated with:', currentUser.picture ? 'picture URL' : 'fallback SVG');
+            avatarElement.src =
+              currentUser.picture ||
+              'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2NjdlZWEiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4PSI4IiB5PSI4Ij4KPHBhdGggZD0iTTggMTJDMTAuMjA5MSAxMiAxMiAxMC4yMDkxIDEyIDhDMTIgNS43OTA5IDEwLjIwOTEgNCA4IDRDNS43OTA5IDQgNCA1Ljc5MDkgNCA4QzQgMTAuMjA5MSA1Ljc5MDkgMTIgOCAxMloiIGZpbGw9IndoaXRlIi8+CjwvZz4KPC9zdmc+';
+            console.log(
+              'Avatar element updated with:',
+              currentUser.picture ? 'picture URL' : 'fallback SVG'
+            );
           } else {
             console.error('Avatar element not found!');
           }
@@ -1110,7 +1157,7 @@
       // Fetch link metadata using free public services
       async function fetchLinkMetadata(url) {
         console.log('Fetching metadata for:', url);
-        const key = '6e77afbad6431f973c4a174201dc77a0';
+        const key = '';
 
         // Try LinkPreview.net free tier (1000 requests/month)
         try {
@@ -1202,7 +1249,7 @@
 
       async function sendMessage() {
         if (isStreaming) return;
-        
+
         // Check authentication
         if (!isAuthenticated()) {
           updateStatus('Please sign in to send messages', 'error');
@@ -1240,7 +1287,10 @@
           });
 
           if (response.status === 401) {
-            updateStatus('Authentication expired. Please sign in again.', 'error');
+            updateStatus(
+              'Authentication expired. Please sign in again.',
+              'error'
+            );
             currentUser = null;
             updateAuthUI();
             return;
@@ -1313,18 +1363,21 @@
         }
 
         try {
-          const response = await fetch('/api/v1/chat/history', { 
+          const response = await fetch('/api/v1/chat/history', {
             method: 'DELETE',
-            credentials: 'include'
+            credentials: 'include',
           });
-          
+
           if (response.status === 401) {
-            updateStatus('Authentication expired. Please sign in again.', 'error');
+            updateStatus(
+              'Authentication expired. Please sign in again.',
+              'error'
+            );
             currentUser = null;
             updateAuthUI();
             return;
           }
-          
+
           document.getElementById('chatContainer').innerHTML = '';
           document.getElementById('latencyIndicator').style.display = 'none';
           updateStatus('History cleared!', 'success');
@@ -1343,19 +1396,27 @@
       document.addEventListener('DOMContentLoaded', function () {
         // Check authentication status on page load
         checkAuthStatus();
-        
+
         // Handle OAuth callback
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('auth') === 'success') {
           updateStatus('Successfully signed in!', 'success');
           // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+          );
           // Recheck auth status
           setTimeout(checkAuthStatus, 500);
         } else if (urlParams.get('auth') === 'error') {
           updateStatus('Authentication failed. Please try again.', 'error');
           // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname
+          );
         }
 
         const messageInput = document.getElementById('messageInput');
@@ -1367,7 +1428,12 @@
 
         // Handle Enter key (send message) and Shift+Enter (new line)
         messageInput.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter' && !e.shiftKey && !isStreaming && isAuthenticated()) {
+          if (
+            e.key === 'Enter' &&
+            !e.shiftKey &&
+            !isStreaming &&
+            isAuthenticated()
+          ) {
             e.preventDefault();
             sendMessage();
           }

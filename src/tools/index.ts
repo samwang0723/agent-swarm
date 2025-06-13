@@ -1,7 +1,7 @@
 import { McpRegistry } from '@tools/mcp-registry';
 import { mcpServers } from '@config/mcp';
 import logger from '@utils/logger';
-import { logCompleteToolRegistryForLLM } from '@utils/schema-logger';
+// import { logCompleteToolRegistryForLLM } from '@utils/schema-logger';
 import { getCurrentModelInfo } from '@config/models';
 
 export class ToolRegistry {
@@ -19,9 +19,9 @@ export class ToolRegistry {
       await this.mcpRegistry.initialize();
 
       // Log comprehensive tool registry for LLM
-      const toolsByServer = this.getToolsByServerMap();
+      // const toolsByServer = this.getToolsByServerMap();
       const totalTools = this.getToolNames().length;
-      logCompleteToolRegistryForLLM(toolsByServer, totalTools);
+      // logCompleteToolRegistryForLLM(toolsByServer, totalTools);
 
       logger.info(`Tool registry initialized with ${totalTools} total tools`);
     } catch (error) {

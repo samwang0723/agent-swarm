@@ -4,6 +4,12 @@ import cookieParser from 'cookie-parser';
 import { apiRouter } from './routes';
 import { corsMiddleware } from './middleware/cors';
 import logger from '@utils/logger';
+import fetch from 'node-fetch';
+
+if (!globalThis.fetch) {
+  // @ts-expect-error: Assigning fetch to globalThis for node-fetch polyfill
+  globalThis.fetch = fetch;
+}
 
 // Load environment variables
 dotenv.config();

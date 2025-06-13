@@ -5,16 +5,15 @@ import logger from '@utils/logger';
 import { Hive, Swarm } from 'agentswarm';
 import { ChatContext } from '@/agents';
 import createBusinessLogicAgent from '@/agents/business-logic';
-
-import { toolRegistry } from '@/tools';
+import { Session } from '@/middleware/auth';
 
 // Cache for swarms to persist across messages
 const swarmCache = new Map<string, Swarm<ChatContext>>();
 
 // Helper function to create and configure the swarm
-function createSwarm(model: LanguageModelV1) {
+function createHiveSwarm(model: LanguageModelV1, accessToken?: string) {
   const hive = new Hive<ChatContext>({
-    queen: createBusinessLogicAgent(),
+    queen: createBusinessLogicAgent(accessToken),
     defaultModel: model,
     defaultContext: { topic: null },
   });
@@ -154,29 +153,23 @@ function handleOutputLifecycle(
 }
 
 export async function sendMessage(
+  session: Session,
   model: LanguageModelV1,
   message: string,
-  userId: string,
-  outputStrategy: OutputStrategy,
-  accessToken?: string // Add optional access token parameter
+  outputStrategy: OutputStrategy
 ) {
   // Add user message to history and get current history
-  messageHistory.addUserMessage(userId, message);
-  const history = messageHistory.getHistory(userId);
+  messageHistory.addUserMessage(session.id, message);
+  const history = messageHistory.getHistory(session.id);
 
   // Get or create swarm for this user
-  let swarm = swarmCache.get(userId);
+  let swarm = swarmCache.get(session.id);
   if (!swarm) {
-    swarm = createSwarm(model);
-    swarmCache.set(userId, swarm);
+    swarm = createHiveSwarm(model, session.accessToken);
+    swarmCache.set(session.id, swarm);
   }
 
   try {
-    // Set access token on tool registry before swarm execution
-    if (accessToken) {
-      toolRegistry.setAccessTokenForAll(accessToken);
-    }
-
     const result = swarm.streamText({
       messages: history,
       returnToQueen: true,
@@ -184,19 +177,19 @@ export async function sendMessage(
     });
 
     // Handle output lifecycle - start
-    handleOutputLifecycle(outputStrategy, userId, 'start');
+    handleOutputLifecycle(outputStrategy, session.id, 'start');
 
     // Stream text and accumulate result
     const finalText = await streamText(result.textStream, outputStrategy);
 
     // Handle response messages and update history
-    await handleResponseMessages(userId, result);
+    await handleResponseMessages(session.id, result);
 
     // Handle output lifecycle - finish
-    handleOutputLifecycle(outputStrategy, userId, 'finish');
+    handleOutputLifecycle(outputStrategy, session.id, 'finish');
 
     return {
-      messages: messageHistory.getHistory(userId),
+      messages: messageHistory.getHistory(session.id),
       newMessage: finalText,
     };
   } catch (error) {
@@ -204,11 +197,11 @@ export async function sendMessage(
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     // Handle output lifecycle - error
-    handleOutputLifecycle(outputStrategy, userId, 'error', errorMessage);
+    handleOutputLifecycle(outputStrategy, session.id, 'error', errorMessage);
 
     // Return on error
     return {
-      messages: messageHistory.getHistory(userId),
+      messages: messageHistory.getHistory(session.id),
       newMessage: `Error: ${errorMessage}`,
     };
   }

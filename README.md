@@ -23,6 +23,9 @@ A powerful AI Agent Swarm application built with TypeScript, featuring intellige
 - **📊 Interactive Web Interface**: Built-in web interface for easy testing and interaction
 - **🔧 TypeScript**: Full type safety and modern development experience
 - **📈 Extensible Architecture**: Easy to add new agents and MCP tools
+- **⚙️ Configuration-Driven**: NEW! Declarative agent setup - add agents without code changes
+- **🛡️ Auto-Validation**: NEW! Comprehensive configuration validation with detailed error messages
+- **🔄 Smart Routing**: NEW! Automatic handover tool generation based on keywords
 
 ## 🏗️ Architecture Overview
 
@@ -220,14 +223,28 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ## 🤖 Agent System
 
-### AgentSwarm Architecture
+### New Configuration-Driven Architecture
 
-The application uses the AgentSwarm framework's Hive/Swarm pattern:
+The Agent Swarm now uses a **modern, configuration-driven architecture** that makes agent management simple, scalable, and maintainable. The system automatically handles agent creation, routing, and tool integration based on declarative configuration.
+
+### Key Components
+
+- **Configuration Layer** (`src/config/agents.ts`): Declarative agent definitions
+- **Agent Registry** (`src/agents/registry.ts`): Manages agent lifecycle and handover tools  
+- **Agent Factory** (`src/agents/factory.ts`): Singleton factory for creating agent systems
+- **Business Logic Agent** (`src/agents/business-logic.ts`): Simplified 3-line entry point
+
+### AgentSwarm Integration
+
+The system seamlessly integrates with AgentSwarm's Hive/Swarm pattern:
 
 ```typescript
-// Create a hive with a queen agent
+// Simple agent creation - everything is handled automatically
+const agent = createBusinessLogicAgent(accessToken);
+
+// Create a hive with the configured agent system
 const hive = new Hive<ChatContext>({
-  queen: createBusinessLogicAgent(),
+  queen: agent, // This is actually the receptionist that routes to specialists
   defaultModel: model,
   defaultContext: { topic: null },
 });
@@ -236,74 +253,144 @@ const hive = new Hive<ChatContext>({
 const swarm = hive.spawnSwarm();
 ```
 
-### Agent Types
+### How It Works
 
-#### 1. Business Logic Agent (Queen)
+#### 1. Declarative Agent Configuration
 
-The main entry point that routes to specialized agents:
+Define agents in `src/config/agents.ts` without writing complex code:
 
 ```typescript
-export default function createBusinessLogicAgent() {
-  const recommendationAgent = createMultiServiceAgent(
-    ['restaurant-booking', 'time'],
-    loadSystemPrompt('restaurant-recommendation')
-  );
-
-  const receptionistAgent = new Agent<ChatContext>({
+export const agentSystemConfig: AgentSystemConfig = {
+  receptionist: {
     name: 'Receptionist',
     description: 'Routes user queries to appropriate agents',
-    tools: {
-      transfer_to_recommendation: transferToRecommendation,
+    instructions: 'You are a helpful receptionist...',
+  },
+  agents: [
+    {
+      id: 'restaurant-recommendation',
+      name: 'Restaurant Recommendation Agent',
+      description: 'Handles restaurant recommendations and bookings',
+      mcpServers: ['restaurant-booking', 'time'],
+      systemPromptFile: 'restaurant-recommendation',
+      enabled: true,
+      requiresAuth: false,
+      routingKeywords: ['restaurant', 'food', 'dining', 'eat'],
+      routingDescription: 'Transfer to restaurant agent for dining assistance',
     },
-  });
+    // More agents...
+  ],
+};
+```
 
-  return receptionistAgent;
+#### 2. Automatic Agent Creation
+
+The system automatically:
+- ✅ Validates configurations against available MCP servers
+- ✅ Creates specialized agents with proper MCP tool integration
+- ✅ Generates handover tools for intelligent routing
+- ✅ Sets up bidirectional transfers between agents
+- ✅ Handles authentication and access tokens
+- ✅ Provides comprehensive logging and error handling
+
+#### 3. Intelligent Routing
+
+The receptionist agent automatically gets handover tools based on your configuration:
+
+```typescript
+// Automatically generated based on agent config
+transfer_to_restaurant_recommendation: {
+  type: 'handover',
+  description: 'Transfer to restaurant agent for dining assistance',
+  parameters: z.object({
+    topic: z.string().describe('User requested topic'),
+  }),
+  execute: async ({ topic }) => ({
+    agent: restaurantAgent, // Automatically created
+    context: { topic },
+  }),
 }
 ```
 
-#### 2. Multi-Service Agent
+### Agent Architecture
 
-Uses tools from multiple MCP servers:
+#### Business Logic Agent (Entry Point)
 
-```typescript
-const agent = createMultiServiceAgent(
-  ['restaurant-booking', 'time'],
-  'Custom system prompt'
-);
-```
-
-#### 3. Adaptive Agent
-
-Automatically uses all available MCP servers:
+Now incredibly simple - just 3 lines:
 
 ```typescript
-const agent = createAdaptiveAgent('Custom system prompt');
+export default function createBusinessLogicAgent(accessToken?: string): Agent<ChatContext> {
+  const factory = AgentFactory.getInstance();
+  return factory.createBusinessLogicAgent(accessToken);
+}
 ```
 
-#### 4. Single-Purpose Agent
+#### Receptionist Agent (Router)
 
-Specialized for one MCP server:
+Automatically created with handover tools for all enabled agents:
+- Routes user queries to appropriate specialists
+- Uses routing keywords for intelligent decisions
+- Provides friendly initial responses
+- Handles transfers seamlessly
 
-```typescript
-const agent = createSinglePurposeAgent(
-  'restaurant-booking',
-  'Custom system prompt',
-  'restaurant-agent'
-);
-```
+#### Specialized Agents
+
+Created automatically based on configuration:
+- **Multi-Service Agents**: Use tools from multiple MCP servers
+- **Authentication Handling**: Automatic OAuth token management
+- **Bidirectional Handovers**: Can transfer back to receptionist
+- **Custom Instructions**: Support for additional prompt instructions
 
 ### System Prompts
 
-Agents use system prompts loaded from files in `src/config/prompts/`:
+Agents use system prompts loaded from `src/config/prompts/`:
 
 ```typescript
-// Load prompt from src/config/prompts/restaurant-recommendation.txt
+// Automatically loaded based on systemPromptFile in config
 const prompt = loadSystemPrompt('restaurant-recommendation');
 ```
 
 Available prompts:
 - `restaurant-recommendation.txt` - For restaurant recommendation agents
+- `google-assistant.txt` - For Gmail and Google services
 - `browser-booking.txt` - For browser-based booking automation
+- Add your own prompt files as needed
+
+### Benefits of New Architecture
+
+🎯 **Maintainability**: Configuration-driven approach makes changes easy  
+🔧 **Extensibility**: Add new agents without modifying existing code  
+✅ **Reliability**: Comprehensive validation prevents runtime errors  
+📊 **Observability**: Rich logging and statistics for monitoring  
+🏗️ **Scalability**: Clean architecture supports growth  
+🛡️ **Type Safety**: Full TypeScript support prevents bugs  
+
+### Migration from Legacy Code
+
+**Before** (120+ lines of complex code):
+```typescript
+export default function createBusinessLogicAgent(accessToken?: string) {
+  // Complex manual agent creation
+  // Manual handover tool setup
+  // Error-prone configuration
+  // Mixed concerns
+  // Hard to extend
+}
+```
+
+**After** (3 lines + configuration):
+```typescript
+export default function createBusinessLogicAgent(accessToken?: string): Agent<ChatContext> {
+  const factory = AgentFactory.getInstance();
+  return factory.createBusinessLogicAgent(accessToken);
+}
+```
+
+The complexity moved to:
+- **Declarative configuration** (`src/config/agents.ts`)
+- **Reusable registry system** (`src/agents/registry.ts`)
+- **Factory pattern** (`src/agents/factory.ts`)
+- **Utility functions** (`src/agents/utils.ts`)
 
 ## 🔌 MCP Tool Integration
 
@@ -360,7 +447,11 @@ src/
 ├── agents/
 │   ├── index.ts              # Agent creation factories and types
 │   ├── convert.ts           # MCP tool to agent tool conversion
-│   └── business-logic.ts    # Business logic agent (Queen) implementation
+│   ├── business-logic.ts    # Business logic agent entry point (3 lines!)
+│   ├── registry.ts          # Agent registry for lifecycle management
+│   ├── factory.ts           # Singleton factory for agent system creation
+│   ├── utils.ts             # Validation and utility functions
+│   └── README.md            # Agent system documentation
 ├── messages/
 │   ├── types.ts              # OutputStrategy interface definitions
 │   ├── output-strategies.ts  # SSE and output implementations
@@ -374,7 +465,11 @@ src/
 ├── config/
 │   ├── index.ts             # Configuration management
 │   ├── mcp.ts               # MCP server configuration
+│   ├── agents.ts            # Agent system configuration (NEW!)
 │   └── prompts/             # System prompt files
+│       ├── restaurant-recommendation.txt
+│       ├── google-assistant.txt
+│       └── browser-booking.txt
 ├── utils/
 │   └── logger.ts            # Winston-based logging utility
 └── index.ts                 # Express server with authentication
@@ -382,44 +477,79 @@ public/
 └── index.html               # Interactive web interface
 ```
 
+### Key Architecture Changes
+
+**New Configuration-Driven Files:**
+- `src/config/agents.ts` - **Declarative agent definitions** (replaces complex code)
+- `src/agents/registry.ts` - **Agent lifecycle management** (validation, creation, routing)
+- `src/agents/factory.ts` - **Singleton factory pattern** (centralized creation)
+- `src/agents/utils.ts` - **Validation and utilities** (configuration helpers)
+- `src/agents/README.md` - **Comprehensive documentation** (architecture guide)
+
+**Simplified Files:**
+- `src/agents/business-logic.ts` - **Reduced from 120+ lines to 3 lines**
+- Agent creation now handled by configuration instead of manual code
+
+**Enhanced Structure:**
+- Clear separation of concerns
+- Configuration-driven approach
+- Comprehensive validation
+- Type-safe implementations
+- Extensive documentation
+
 ## ➕ Adding New Agents with MCP Tools
 
-### Step 1: Set Up Your MCP Server
+The Agent Swarm now uses a **configuration-driven approach** that makes adding new agents incredibly simple. Instead of writing complex code, you just need to configure your agent declaratively.
 
-First, ensure your MCP server is running and accessible. Your MCP server should expose:
-- `/mcp` endpoint for tool definitions and execution
-- `/health` endpoint for health checks
+### Overview: 4 Simple Steps
 
-### Step 2: Configure the MCP Server
+1. **Configure MCP Server** - Add server configuration
+2. **Create System Prompt** - Write agent instructions  
+3. **Add Agent Configuration** - Declare agent in config
+4. **Test** - Everything else is automatic!
+
+### Step 1: Configure Your MCP Server
 
 Add your MCP server configuration to `src/config/mcp.ts`:
 
 ```typescript
 export const mcpServers: McpServerConfig[] = [
-  // ... existing servers
   {
-    name: 'your-service-name',
-    url: process.env.YOUR_SERVICE_MCP_URL || 'http://localhost:3000/mcp',
+    name: 'restaurant-booking',
+    url: process.env.RESTAURANT_BOOKING_MCP_URL || 'http://localhost:3000/mcp',
     healthUrl:
-      process.env.YOUR_SERVICE_MCP_HEALTH_URL || 'http://localhost:3000/health',
-    enabled: process.env.YOUR_SERVICE_MCP_ENABLED !== 'false',
+      process.env.RESTAURANT_BOOKING_MCP_HEALTH_URL ||
+      'http://localhost:3000/health',
+    enabled: process.env.RESTAURANT_BOOKING_MCP_ENABLED !== 'false',
   },
+  {
+    name: 'time',
+    url: process.env.TIME_MCP_URL || 'http://localhost:3000/mcp',
+    healthUrl:
+      process.env.TIME_MCP_HEALTH_URL || 'http://localhost:3000/health',
+    enabled: process.env.TIME_MCP_ENABLED !== 'false',
+  },
+  // Add more servers here
 ];
 ```
 
-### Step 3: Add Environment Variables
-
-Update your `.env` file:
+Add environment variables to your `.env` file:
 
 ```env
+RESTAURANT_BOOKING_MCP_URL=http://localhost:3000/mcp
+RESTAURANT_BOOKING_MCP_HEALTH_URL=http://localhost:3000/health
+RESTAURANT_BOOKING_MCP_ENABLED=true
+TIME_MCP_URL=http://localhost:3000/mcp
+TIME_MCP_HEALTH_URL=http://localhost:3000/health
+TIME_MCP_ENABLED=true
 YOUR_SERVICE_MCP_URL=http://localhost:3003/mcp
 YOUR_SERVICE_MCP_HEALTH_URL=http://localhost:3003/health
 YOUR_SERVICE_MCP_ENABLED=true
 ```
 
-### Step 4: Create System Prompt (Optional)
+### Step 2: Create System Prompt
 
-Create a system prompt file at `src/config/prompts/your-domain.txt`:
+Create a system prompt file at `src/config/prompts/your-service.txt`:
 
 ```
 You are a specialized assistant for [your domain] services.
@@ -431,66 +561,162 @@ Guidelines:
 - Provide clear explanations
 
 Available tools allow you to:
-- [List tool capabilities]
+- [List your tool capabilities here]
 ```
 
-### Step 5: Create Specialized Agent
+### Step 3: Add Agent Configuration
 
-Create a specialized agent using the factory functions:
+This is where the magic happens! Simply add your agent to `src/config/agents.ts`:
 
 ```typescript
-import { createSinglePurposeAgent, createMultiServiceAgent } from '@/agents';
-import { loadSystemPrompt } from '@/messages/prompt';
-
-// Option 1: Single-purpose agent
-const yourAgent = createSinglePurposeAgent(
-  'your-service-name',
-  loadSystemPrompt('your-domain'),
-  'your-agent-name'
-);
-
-// Option 2: Multi-service agent (includes your service + others)
-const multiAgent = createMultiServiceAgent(
-  ['your-service-name', 'restaurant-booking'],
-  loadSystemPrompt('your-domain')
-);
+export const agentSystemConfig: AgentSystemConfig = {
+  // ... existing config
+  agents: [
+    // ... existing agents
+    {
+      id: 'your-service',
+      name: 'Your Service Agent',
+      description: 'Handles your service related queries',
+      mcpServers: ['your-service-name'], // Must match MCP server name
+      systemPromptFile: 'your-service', // Prompt file name (without .txt)
+      enabled: true,
+      requiresAuth: false, // Set to true if authentication needed
+      routingKeywords: ['service', 'help', 'support', 'your-domain'],
+      routingDescription: 'Transfer to your service agent for specialized assistance',
+      additionalInstructions: '\n\nRemember to be extra helpful!', // Optional
+    },
+  ],
+};
 ```
 
-### Step 6: Update Business Logic Agent
+### Step 4: Test Your Integration
 
-Modify the business logic agent in `src/agents/business-logic.ts` to route to your new agent:
+That's it! 🎉 The system automatically:
+
+- ✅ **Validates** your configuration against available MCP servers
+- ✅ **Creates** the specialized agent with all MCP tools
+- ✅ **Generates** handover tools for routing based on keywords
+- ✅ **Sets up** bidirectional transfers (agent ↔ receptionist)
+- ✅ **Handles** authentication if required
+- ✅ **Provides** comprehensive logging and error handling
+
+Just start the application and test:
+
+```bash
+npm run dev
+```
+
+Navigate to `http://localhost:3000` and try queries containing your routing keywords!
+
+### What Happens Automatically
+
+When you add an agent configuration, the system automatically:
+
+1. **Agent Creation**: Creates a multi-service agent with your specified MCP servers
+2. **Tool Integration**: Loads all tools from your MCP servers
+3. **Routing Setup**: Creates `transfer_to_your_service` handover tool
+4. **Receptionist Update**: Adds your agent to the receptionist's available transfers
+5. **Bidirectional Handovers**: Allows your agent to transfer back to receptionist
+6. **Validation**: Ensures all MCP servers exist and are available
+7. **Authentication**: Handles OAuth tokens if `requiresAuth: true`
+8. **Logging**: Provides detailed logs for debugging and monitoring
+
+### Advanced Configuration Options
 
 ```typescript
-const transferToYourService = {
-  type: 'handover',
-  description: 'Call this tool to transfer to your service agent',
-  parameters: z.object({
-    topic: z.string().describe('Your service topic'),
-  }),
-  execute: async ({ topic }: { topic: string }) => ({
-    agent: yourAgent,
-    context: { topic },
-  }),
-} as const;
-
-// Add to receptionist agent tools
-const receptionistAgent = new Agent<ChatContext>({
-  name: 'Receptionist',
-  description: 'Routes user queries to appropriate agents',
-  instructions: '...',
-  tools: {
-    // ... existing transfers
-    transfer_to_your_service: transferToYourService,
-  },
-});
+{
+  id: 'advanced-agent',
+  name: 'Advanced Service Agent',
+  description: 'Handles complex service operations',
+  mcpServers: ['service-1', 'service-2'], // Multiple MCP servers
+  systemPromptFile: 'advanced-service',
+  additionalInstructions: '\n\nSpecial instructions here...',
+  enabled: true,
+  requiresAuth: true, // Requires Google OAuth
+  routingKeywords: ['advanced', 'complex', 'service'],
+  routingDescription: 'Transfer for advanced service operations requiring authentication',
+}
 ```
 
-### Step 7: Test Your Integration
+### Migration from Legacy Approach
 
-1. Start your MCP server
-2. Run the agent swarm: `npm run dev`
-3. Authenticate via Google OAuth
-4. Test queries related to your service domain using the web interface or API endpoints
+**Before** (Old approach - 7 complex steps):
+- Manual agent creation with factory functions
+- Complex handover tool setup
+- Manual business logic agent modification
+- Error-prone code changes
+
+**After** (New approach - 4 simple steps):
+- Declarative configuration
+- Automatic validation and setup
+- No code changes required
+- Type-safe and error-resistant
+
+### Debugging New Agents
+
+Enable debug logging to see the agent creation process:
+
+```bash
+LOG_LEVEL=debug npm run dev
+```
+
+Check the health endpoint for agent status:
+
+```bash
+curl http://localhost:3000/api/v1/health
+```
+
+The system provides detailed logs showing:
+- Configuration validation results
+- Agent creation success/failure
+- MCP server connectivity
+- Handover tool generation
+- Transfer operations
+
+### Example: Weather Agent
+
+Here's a complete example of adding a weather agent:
+
+**1. MCP Server Config** (`src/config/mcp.ts`):
+```typescript
+{
+  name: 'weather-api',
+  url: 'http://localhost:3004/mcp',
+  healthUrl: 'http://localhost:3004/health',
+  enabled: true,
+  requiresAuth: false,
+}
+```
+
+**2. System Prompt** (`src/config/prompts/weather.txt`):
+```
+You are a weather assistant that provides accurate weather information.
+Use the weather tools to get current conditions and forecasts.
+Always provide temperature in both Celsius and Fahrenheit.
+```
+
+**3. Agent Configuration** (`src/config/agents.ts`):
+```typescript
+{
+  id: 'weather',
+  name: 'Weather Assistant',
+  description: 'Provides weather information and forecasts',
+  mcpServers: ['weather-api'],
+  systemPromptFile: 'weather',
+  enabled: true,
+  requiresAuth: false,
+  routingKeywords: ['weather', 'forecast', 'temperature', 'rain', 'sunny'],
+  routingDescription: 'Transfer to weather assistant for weather information',
+}
+```
+
+**4. Test**:
+```bash
+npm run dev
+# Try: "What's the weather like today?"
+```
+
+Done! Your weather agent is now fully integrated and ready to use. 🌤️
 
 ## 🔧 Development
 

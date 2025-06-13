@@ -7,6 +7,7 @@ import {
   storeUserSession,
   getUserSession,
   removeUserSession,
+  Session,
 } from '../middleware/auth';
 
 const router: Router = express.Router();
@@ -229,10 +230,10 @@ router.get(
       }
 
       // Create a chat session automatically using user ID
-      const chatSessionId = userInfo.id || randomUUID();
+      const chatSessionId = randomUUID();
 
       const user = {
-        id: userInfo.id || '',
+        id: userInfo.id || randomUUID(),
         email: userInfo.email || '',
         name: userInfo.name || undefined,
         picture: userInfo.picture || undefined,
@@ -242,7 +243,7 @@ router.get(
 
       // Generate session token and store user with session info
       const sessionToken = generateSessionToken();
-      storeUserSession(sessionToken, user);
+      storeUserSession(sessionToken, user as Session);
 
       logger.info(
         `User authenticated with auto-created session: ${user.email} (sessionId: ${chatSessionId})`

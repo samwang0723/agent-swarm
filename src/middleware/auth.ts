@@ -1,15 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import logger from '@utils/logger';
 
+export interface Session {
+  id: string;
+  email: string;
+  name?: string;
+  picture?: string;
+  sessionId: string;
+  accessToken?: string;
+  createdAt: Date;
+}
+
 // Extend Request interface to include user
 export interface AuthenticatedRequest extends Request {
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-    picture?: string;
-    accessToken?: string; // OAuth access token for external API calls
-  };
+  user: Session;
 }
 
 /**
@@ -18,31 +22,12 @@ export interface AuthenticatedRequest extends Request {
  */
 
 // Simple in-memory storage for demo - replace with proper database
-const userSessions = new Map<
-  string,
-  {
-    id: string;
-    email: string;
-    name?: string;
-    picture?: string;
-    accessToken?: string;
-    createdAt: Date;
-  }
->();
+const userSessions = new Map<string, Session>();
 
 /**
  * Store user session
  */
-export const storeUserSession = (
-  token: string,
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-    picture?: string;
-    accessToken?: string;
-  }
-) => {
+export const storeUserSession = (token: string, user: Session) => {
   userSessions.set(token, {
     ...user,
     createdAt: new Date(),

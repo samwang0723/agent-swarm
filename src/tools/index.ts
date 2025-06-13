@@ -1,23 +1,29 @@
 import { McpRegistry } from '@tools/mcp-registry';
 import { mcpServers } from '@config/mcp';
 import logger from '@utils/logger';
+import { logCompleteToolRegistryForLLM } from '@utils/schema-logger';
+import { getCurrentModelInfo } from '@config/models';
 
 export class ToolRegistry {
   private mcpRegistry: McpRegistry;
 
   constructor() {
-    this.mcpRegistry = new McpRegistry(mcpServers);
+    // Get current model provider for conditional schema handling
+    const modelInfo = getCurrentModelInfo();
+    this.mcpRegistry = new McpRegistry(mcpServers, modelInfo.provider);
     this.initializeTools();
   }
 
   private async initializeTools() {
     try {
       await this.mcpRegistry.initialize();
-      logger.info(
-        `Tool registry initialized with ${
-          this.getToolNames().length
-        } total tools`
-      );
+
+      // Log comprehensive tool registry for LLM
+      const toolsByServer = this.getToolsByServerMap();
+      const totalTools = this.getToolNames().length;
+      logCompleteToolRegistryForLLM(toolsByServer, totalTools);
+
+      logger.info(`Tool registry initialized with ${totalTools} total tools`);
     } catch (error) {
       logger.error('Failed to initialize tools:', error);
     }

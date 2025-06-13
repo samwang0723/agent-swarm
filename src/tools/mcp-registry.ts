@@ -1,13 +1,17 @@
 import { Tool } from 'ai';
 import { McpClient, McpServerConfig } from '@tools/mcp-client';
 import logger from '@utils/logger';
+import type { ModelProvider } from '@config/models';
 
 export class McpRegistry {
   private clients: Map<string, McpClient> = new Map();
   private allTools: Map<string, Tool> = new Map();
   private toolsByServer: Map<string, Map<string, Tool>> = new Map();
 
-  constructor(private configs: McpServerConfig[]) {}
+  constructor(
+    private configs: McpServerConfig[],
+    private modelProvider?: ModelProvider
+  ) {}
 
   async initialize(): Promise<void> {
     const initPromises = this.configs.map(config =>
@@ -40,7 +44,7 @@ export class McpRegistry {
     }
 
     try {
-      const client = new McpClient(config);
+      const client = new McpClient(config, this.modelProvider);
       await client.initialize();
 
       this.clients.set(config.name, client);

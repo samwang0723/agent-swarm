@@ -1,6 +1,7 @@
 import { Tool } from 'ai';
 import { z } from 'zod';
 import logger from '@utils/logger';
+import type { ModelProvider } from '@config/models';
 
 export interface McpServerConfig {
   name: string;
@@ -22,7 +23,10 @@ export class McpClient {
   private availableTools: McpTool[] = [];
   private accessToken: string | null = null;
 
-  constructor(private config: McpServerConfig) {}
+  constructor(
+    private config: McpServerConfig,
+    private modelProvider?: ModelProvider
+  ) {}
 
   /**
    * Set the OAuth access token for authenticated requests
@@ -254,6 +258,13 @@ export class McpClient {
       return z.object({});
     }
 
+    // Log the schema conversion strategy being used
+    if (this.modelProvider) {
+      logger.debug(
+        `Using ${this.modelProvider} schema conversion strategy for ${this.config.name}`
+      );
+    }
+
     const zodShape: Record<string, z.ZodType> = {};
 
     for (const [key, prop] of Object.entries(schema.properties || {})) {
@@ -288,12 +299,19 @@ export class McpClient {
         zodType = zodType.describe(property.description);
       }
 
-      // OpenAI is stricter about required fields - if a property has a default value,
-      // it can be optional, otherwise treat it as required for OpenAI compatibility
-      const isRequired =
-        schema.required?.includes(key) ||
-        (property.default === undefined &&
-          !Object.prototype.hasOwnProperty.call(property, 'default'));
+      // Conditional logic based on model provider
+      let isRequired: boolean;
+
+      if (this.modelProvider === 'google') {
+        // For Google Gemini: Only mark as required if explicitly listed in the schema's required array
+        isRequired = schema.required?.includes(key) ?? false;
+      } else {
+        // For Claude/OpenAI: Use stricter validation - required unless has default value
+        isRequired =
+          schema.required?.includes(key) ||
+          (property.default === undefined &&
+            !Object.prototype.hasOwnProperty.call(property, 'default'));
+      }
 
       if (!isRequired) {
         zodType = zodType.optional();

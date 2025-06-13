@@ -1,11 +1,12 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import logger from '@utils/logger';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-export type ModelProvider = 'anthropic' | 'openai';
+export type ModelProvider = 'anthropic' | 'openai' | 'google';
 
 export interface ModelConfig {
   provider: ModelProvider;
@@ -40,6 +41,12 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
     baseURL: 'https://api.openai.com/v1',
     apiKey: process.env.OPENAI_API_KEY,
   },
+  'gemini-2.5-flash': {
+    provider: 'google',
+    modelName: 'gemini-2.5-flash-preview-05-20',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+    apiKey: process.env.GOOGLE_API_KEY,
+  },
 };
 
 // Get the current model from environment variable or default
@@ -61,7 +68,11 @@ export const createModel = () => {
 
   if (!config.apiKey) {
     const envVar =
-      config.provider === 'anthropic' ? 'ANTHROPIC_API_KEY' : 'OPENAI_API_KEY';
+      config.provider === 'anthropic'
+        ? 'ANTHROPIC_API_KEY'
+        : config.provider === 'google'
+          ? 'GOOGLE_API_KEY'
+          : 'OPENAI_API_KEY';
     const error = `Missing API key for ${config.provider}. Please set ${envVar} environment variable.`;
     logger.error(error);
     throw new Error(error);
@@ -93,6 +104,16 @@ export const createModel = () => {
         const model = openai(config.modelName);
         logger.info(
           `✅ OpenAI model ${config.modelName} initialized successfully`
+        );
+        return model;
+      }
+      case 'google': {
+        const google = createGoogleGenerativeAI({
+          apiKey: config.apiKey,
+        });
+        const model = google(`models/${config.modelName}`);
+        logger.info(
+          `✅ Google model models/${config.modelName} initialized successfully`
         );
         return model;
       }

@@ -9,6 +9,13 @@ import {
   removeUserSession,
   Session,
 } from '../middleware/auth';
+import {
+  ApiError,
+  createAuthError,
+  createServerError,
+} from '../utils/api-error';
+import { ErrorCodes } from '../utils/error-code';
+import { asyncHandler } from '../middleware/error-handler';
 
 const router: Router = express.Router();
 
@@ -43,32 +50,36 @@ const generateSessionToken = (): string => {
  *       500:
  *         description: Server error
  */
-router.get('/google', (req: Request, res: Response) => {
-  try {
+router.get(
+  '/google',
+  asyncHandler(async (req: Request, res: Response) => {
     const scopes = [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile',
     ];
 
-    const authUrl = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: scopes,
-      state: 'gmail-auth', // CSRF protection
-      include_granted_scopes: true,
-      response_type: 'code',
-    });
+    try {
+      const authUrl = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: scopes,
+        state: 'gmail-auth', // CSRF protection
+        include_granted_scopes: true,
+        response_type: 'code',
+      });
 
-    logger.info(`Redirecting to Google OAuth: ${authUrl}`);
-    res.redirect(authUrl);
-  } catch (error) {
-    logger.error('Error generating auth URL:', error);
-    res.status(500).json({
-      error: 'Authentication initialization failed',
-      code: 'AUTH_INIT_ERROR',
-    });
-  }
-});
+      logger.info(`Redirecting to Google OAuth: ${authUrl}`);
+      res.redirect(authUrl);
+    } catch (error) {
+      logger.error('Error generating auth URL:', error);
+      throw createServerError(
+        ErrorCodes.AUTH_INIT_ERROR,
+        undefined,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  })
+);
 
 /**
  * @swagger
@@ -122,24 +133,24 @@ router.get('/google', (req: Request, res: Response) => {
  */
 router.get(
   '/google/callback',
-  async (req: Request, res: Response): Promise<void> => {
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { code, state } = req.query;
+
+    logger.info(`Callback received with: code: ${!!code} state: ${state}`);
+
+    if (state !== 'gmail-auth') {
+      logger.error('Invalid state parameter');
+      res.redirect('/?auth=error&reason=invalid_state');
+      return;
+    }
+
+    if (!code) {
+      logger.error('Authorization code is missing');
+      res.redirect('/?auth=error&reason=missing_code');
+      return;
+    }
+
     try {
-      const { code, state } = req.query;
-
-      logger.info(`Callback received with: code: ${!!code} state: ${state}`);
-
-      if (state !== 'gmail-auth') {
-        logger.error('Invalid state parameter');
-        res.redirect('/?auth=error&reason=invalid_state');
-        return;
-      }
-
-      if (!code) {
-        logger.error('Authorization code is missing');
-        res.redirect('/?auth=error&reason=missing_code');
-        return;
-      }
-
       // Create a new OAuth2 client instance for this request
       const callbackOAuth2Client = new OAuth2(
         process.env.GOOGLE_CLIENT_ID,
@@ -212,8 +223,10 @@ router.get(
           if (!userInfoResponse.ok) {
             const errorText = await userInfoResponse.text();
             logger.error(`Direct fetch error response: ${errorText}`);
-            throw new Error(
-              `Direct fetch failed: ${userInfoResponse.status} ${userInfoResponse.statusText}`
+            throw createServerError(
+              ErrorCodes.GOOGLE_USERINFO_ERROR,
+              `Direct fetch failed: ${userInfoResponse.status} ${userInfoResponse.statusText}`,
+              { status: userInfoResponse.status, response: errorText }
             );
           }
 
@@ -225,7 +238,10 @@ router.get(
           };
           logger.info('User info retrieved via direct fetch');
         } else {
-          throw new Error('No access token available for direct fetch');
+          throw createServerError(
+            ErrorCodes.GOOGLE_TOKEN_ERROR,
+            'No access token available for direct fetch'
+          );
         }
       }
 
@@ -261,9 +277,16 @@ router.get(
       res.redirect('/?auth=success');
     } catch (error) {
       logger.error('OAuth callback error:', error);
+
+      // If it's already an ApiError, let it bubble up to the error handler
+      if (error instanceof ApiError) {
+        throw error;
+      }
+
+      // For other errors, redirect to frontend with error
       res.redirect('/?auth=error&reason=server_error');
     }
-  }
+  })
 );
 
 /**
@@ -294,8 +317,9 @@ router.get(
  *       401:
  *         description: Unauthorized
  */
-router.get('/me', (req: Request, res: Response): void => {
-  try {
+router.get(
+  '/me',
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     let token: string | undefined;
 
     // Try to get token from Authorization header first
@@ -308,21 +332,13 @@ router.get('/me', (req: Request, res: Response): void => {
     }
 
     if (!token) {
-      res.status(401).json({
-        error: 'Authentication required',
-        code: 'AUTH_REQUIRED',
-      });
-      return;
+      throw createAuthError(ErrorCodes.AUTH_REQUIRED);
     }
 
     const userSession = getUserSession(token);
 
     if (!userSession) {
-      res.status(401).json({
-        error: 'Invalid session token',
-        code: 'INVALID_TOKEN',
-      });
-      return;
+      throw createAuthError(ErrorCodes.INVALID_TOKEN);
     }
 
     res.json({
@@ -331,14 +347,8 @@ router.get('/me', (req: Request, res: Response): void => {
       name: userSession.name,
       picture: userSession.picture,
     });
-  } catch (error) {
-    logger.error('User info error:', error);
-    res.status(500).json({
-      error: 'Failed to get user information',
-      code: 'USER_INFO_ERROR',
-    });
-  }
-});
+  })
+);
 
 /**
  * @swagger
@@ -364,8 +374,9 @@ router.get('/me', (req: Request, res: Response): void => {
  *       401:
  *         description: Unauthorized
  */
-router.post('/logout', (req: Request, res: Response): void => {
-  try {
+router.post(
+  '/logout',
+  asyncHandler(async (req: Request, res: Response): Promise<void> => {
     let token: string | undefined;
 
     // Try to get token from Authorization header first
@@ -378,9 +389,18 @@ router.post('/logout', (req: Request, res: Response): void => {
     }
 
     if (token) {
-      // Remove session from memory
-      removeUserSession(token);
-      logger.info('User session removed');
+      try {
+        // Remove session from memory
+        removeUserSession(token);
+        logger.info('User session removed');
+      } catch (error) {
+        logger.error('Error removing session:', error);
+        throw createServerError(
+          ErrorCodes.LOGOUT_ERROR,
+          'Failed to remove user session',
+          error instanceof Error ? error.message : String(error)
+        );
+      }
     }
 
     // Clear the session cookie
@@ -394,13 +414,7 @@ router.post('/logout', (req: Request, res: Response): void => {
       success: true,
       message: 'Logged out successfully',
     });
-  } catch (error) {
-    logger.error('Logout error:', error);
-    res.status(500).json({
-      error: 'Logout failed',
-      code: 'LOGOUT_ERROR',
-    });
-  }
-});
+  })
+);
 
 export { router as authRouter };

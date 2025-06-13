@@ -1,8 +1,9 @@
 import dotenv from 'dotenv';
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
 import cookieParser from 'cookie-parser';
 import { apiRouter } from './routes';
 import { corsMiddleware } from './middleware/cors';
+import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import logger from '@utils/logger';
 import fetch from 'node-fetch';
 
@@ -28,28 +29,11 @@ app.use(corsMiddleware);
 // Mount API routes
 app.use('/', apiRouter);
 
-// Error handling middleware
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((error: Error, req: Request, res: Response, next: NextFunction) => {
-  logger.error('Unhandled error:', error);
-  res.status(500).json({
-    error: 'Internal server error',
-    message:
-      process.env.NODE_ENV === 'development'
-        ? error.message
-        : 'Something went wrong',
-    code: 'INTERNAL_ERROR',
-  });
-});
+// 404 handler - must come before error handler
+app.use(notFoundHandler);
 
-// 404 handler
-app.use((req: Request, res: Response) => {
-  res.status(404).json({
-    error: 'Not found',
-    message: `Route ${req.method} ${req.originalUrl} not found`,
-    code: 'NOT_FOUND',
-  });
-});
+// Error handling middleware - must be last
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {

@@ -694,11 +694,32 @@
         border: 2px solid #e1e8ed;
         flex-shrink: 0;
         transition: all 0.3s ease;
+        background: #f8fafc;
+        object-fit: cover;
+        opacity: 0;
+        animation: fadeIn 0.3s ease-out forwards;
       }
 
       .user-avatar:hover {
         border-color: #667eea;
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+      }
+
+      /* Loading state for avatar */
+      .user-avatar.loading {
+        opacity: 0.5;
+        animation: pulse 1.5s infinite;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
 
       .logout-btn {
@@ -932,6 +953,13 @@
           userSection: !!userSection,
         });
 
+        // Ensure DOM elements exist before proceeding
+        if (!loginSection || !userSection) {
+          console.warn('Auth UI elements not ready, retrying in 100ms');
+          setTimeout(updateAuthUI, 100);
+          return;
+        }
+
         // Add detailed debugging for currentUser data
         if (currentUser) {
           console.log('=== USER DATA DEBUG ===');
@@ -961,6 +989,13 @@
           const emailElement = document.getElementById('userEmail');
           const avatarElement = document.getElementById('userAvatar');
 
+          // Ensure elements exist before updating
+          if (!emailElement || !avatarElement) {
+            console.warn('User info elements not ready, retrying in 100ms');
+            setTimeout(updateAuthUI, 100);
+            return;
+          }
+
           if (emailElement) {
             const displayText =
               currentUser.email ||
@@ -974,9 +1009,64 @@
           }
 
           if (avatarElement) {
-            avatarElement.src =
-              currentUser.picture ||
+            // Set up proper image loading with error handling
+            const fallbackSvg =
               'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2NjdlZWEiLz4KPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4PSI4IiB5PSI4Ij4KPHBhdGggZD0iTTggMTJDMTAuMjA5MSAxMiAxMiAxMC4yMDkxIDEyIDhDMTIgNS43OTA5IDEwLjIwOTEgNCA4IDRDNS43OTA5IDQgNCA1Ljc5MDkgNCA4QzQgMTAuMjA5MSA1Ljc5MDkgMTIgOCAxMloiIGZpbGw9IndoaXRlIi8+CjwvZz4KPC9zdmc+';
+
+            // Clear any existing error handlers
+            avatarElement.onload = null;
+            avatarElement.onerror = null;
+
+            if (currentUser.picture && currentUser.picture.startsWith('http')) {
+              // Show loading state
+              avatarElement.classList.add('loading');
+
+              // For external URLs, implement proper error handling
+              avatarElement.onload = function () {
+                console.log('Avatar loaded successfully:', currentUser.picture);
+                this.classList.remove('loading');
+              };
+
+              avatarElement.onerror = function () {
+                console.warn(
+                  'Failed to load avatar, using fallback:',
+                  currentUser.picture
+                );
+                this.onload = null;
+                this.onerror = null;
+                this.classList.remove('loading');
+                this.src = fallbackSvg;
+              };
+
+              // Set a loading timeout as additional safety
+              const loadTimeout = setTimeout(() => {
+                if (
+                  !avatarElement.complete ||
+                  avatarElement.naturalHeight === 0
+                ) {
+                  console.warn('Avatar loading timeout, using fallback');
+                  avatarElement.onload = null;
+                  avatarElement.onerror = null;
+                  avatarElement.classList.remove('loading');
+                  avatarElement.src = fallbackSvg;
+                }
+              }, 5000); // 5 second timeout
+
+              // Clear timeout if image loads successfully
+              const originalOnload = avatarElement.onload;
+              avatarElement.onload = function () {
+                clearTimeout(loadTimeout);
+                this.classList.remove('loading');
+                if (originalOnload) originalOnload.call(this);
+              };
+
+              avatarElement.src = currentUser.picture;
+            } else {
+              // Use fallback for missing or non-http URLs
+              avatarElement.classList.remove('loading');
+              avatarElement.src = fallbackSvg;
+            }
+
             console.log(
               'Avatar element updated with:',
               currentUser.picture ? 'picture URL' : 'fallback SVG'
@@ -1394,10 +1484,7 @@
 
       // Setup textarea auto-resize and keyboard handling
       document.addEventListener('DOMContentLoaded', function () {
-        // Check authentication status on page load
-        checkAuthStatus();
-
-        // Handle OAuth callback
+        // Handle OAuth callback first
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('auth') === 'success') {
           updateStatus('Successfully signed in!', 'success');
@@ -1407,8 +1494,10 @@
             document.title,
             window.location.pathname
           );
-          // Recheck auth status
-          setTimeout(checkAuthStatus, 500);
+          // Wait a bit longer for OAuth flow to complete
+          setTimeout(() => {
+            checkAuthStatus();
+          }, 1000);
         } else if (urlParams.get('auth') === 'error') {
           updateStatus('Authentication failed. Please try again.', 'error');
           // Clean up URL
@@ -1417,6 +1506,11 @@
             document.title,
             window.location.pathname
           );
+          // Still check auth status in case user is already logged in
+          setTimeout(checkAuthStatus, 500);
+        } else {
+          // No OAuth callback, check auth status immediately
+          checkAuthStatus();
         }
 
         const messageInput = document.getElementById('messageInput');

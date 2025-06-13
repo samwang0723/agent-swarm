@@ -4,31 +4,84 @@ import { sendMessage } from '@messages/chat';
 import { SSEOutput } from '@messages/output-strategies';
 import { OutputStrategy } from '@messages/types';
 import logger from '@utils/logger';
-import { createAnthropic } from '@ai-sdk/anthropic';
-// import { createOpenAI } from '@ai-sdk/openai';
+import {
+  createModel,
+  getCurrentModelInfo,
+  getAvailableModels,
+} from '@config/models';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 const router: Router = express.Router();
 
-const anthropic = createAnthropic({
-  baseURL: 'https://api.anthropic.com/v1',
-  apiKey: process.env.ANTHROPIC_API_KEY,
+// Initialize the model using the configuration handler
+const model = createModel();
+
+// Log current model information
+const modelInfo = getCurrentModelInfo();
+logger.info(
+  `Chat API using model: ${modelInfo.modelName} (${modelInfo.provider})`
+);
+
+/**
+ * @swagger
+ * /api/v1/chat/models:
+ *   get:
+ *     summary: Get current model information and available models
+ *     tags: [Chat]
+ *     security:
+ *       - BearerAuth: []
+ *       - CookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Model information retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 current:
+ *                   type: object
+ *                   properties:
+ *                     key:
+ *                       type: string
+ *                     provider:
+ *                       type: string
+ *                     modelName:
+ *                       type: string
+ *                     isConfigured:
+ *                       type: boolean
+ *                 available:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       key:
+ *                         type: string
+ *                       provider:
+ *                         type: string
+ *                       modelName:
+ *                         type: string
+ *                       isConfigured:
+ *                         type: boolean
+ *       401:
+ *         description: Unauthorized - authentication required
+ */
+router.get('/models', requireAuth, (req, res: Response) => {
+  try {
+    const current = getCurrentModelInfo();
+    const available = getAvailableModels();
+
+    res.json({
+      current,
+      available,
+    });
+  } catch (error) {
+    logger.error('Error retrieving model information:', error);
+    res.status(500).json({
+      error: 'Failed to retrieve model information',
+    });
+  }
 });
-
-const MODEL = 'claude-3-5-sonnet-20241022';
-const model = anthropic(MODEL);
-
-// const openai = createOpenAI({
-//   baseURL: 'https://api.openai.com/v1',
-//   apiKey: process.env.OPENAI_API_KEY,
-//   compatibility: 'strict',
-// });
-
-// const MODEL = 'gpt-4o';
-// const model = openai(MODEL);
 
 /**
  * @swagger

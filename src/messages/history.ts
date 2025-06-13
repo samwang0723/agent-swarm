@@ -1,5 +1,47 @@
 import { Message } from '@messages/types';
 
+// Helper function to fix empty assistant messages that breaks the LLM
+// {
+//   "role": "assistant",
+//   "content": []
+// }
+function processMessage(message: Message): Message {
+  if (message.role === 'assistant' && Array.isArray(message.content)) {
+    // Handle empty content array
+    if (message.content.length === 0) {
+      return {
+        ...message,
+        content: [
+          {
+            type: 'text',
+            text: 'agent handover',
+          },
+        ],
+      };
+    }
+
+    // Check if any text content is empty and replace only those items
+    const hasEmptyText = message.content.some(
+      (item: any) => item?.type === 'text' && item?.text === ''
+    );
+    if (hasEmptyText) {
+      return {
+        ...message,
+        content: message.content.map((item: any) => {
+          if (item?.type === 'text' && item?.text === '') {
+            return {
+              ...item,
+              text: 'agent handover',
+            };
+          }
+          return item;
+        }),
+      };
+    }
+  }
+  return message;
+}
+
 // Message history management class
 class MessageHistory {
   private history: Map<string, Message[]> = new Map();
@@ -9,7 +51,9 @@ class MessageHistory {
    * Get message history for a specific user
    */
   getHistory(userId: string): Message[] {
-    return this.history.get(userId) || [];
+    const messages = this.history.get(userId) || [];
+    // Process all messages to fix any empty assistant content
+    return messages.map(processMessage);
   }
 
   /**
@@ -43,7 +87,9 @@ class MessageHistory {
    */
   addToolMessages(userId: string, toolMessages: Message[]): void {
     const userHistory = this.getHistory(userId);
-    userHistory.push(...toolMessages);
+    // Process the incoming tool messages to fix any empty assistant content
+    const processedMessages = toolMessages.map(processMessage);
+    userHistory.push(...processedMessages);
     this.history.set(userId, userHistory);
   }
 

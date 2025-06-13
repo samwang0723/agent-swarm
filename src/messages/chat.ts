@@ -83,45 +83,8 @@ async function handleResponseMessages(userId: string, result: any) {
   try {
     const responseMessages = await result.messages;
     if (responseMessages?.length > 0) {
-      // Filter and fix empty assistant messages to prevent LLM errors during agent handover
-      const processedMessages = responseMessages.map((message: any) => {
-        if (message.role === 'assistant' && Array.isArray(message.content)) {
-          // Handle empty content array
-          if (message.content.length === 0) {
-            return {
-              ...message,
-              content: [
-                {
-                  type: 'text',
-                  text: 'agent handover',
-                },
-              ],
-            };
-          }
-
-          // Check if any text content is empty and replace only those items
-          const hasEmptyText = message.content.some(
-            (item: any) => item?.type === 'text' && item?.text === ''
-          );
-          if (hasEmptyText) {
-            return {
-              ...message,
-              content: message.content.map((item: any) => {
-                if (item?.type === 'text' && item?.text === '') {
-                  return {
-                    ...item,
-                    text: 'agent handover',
-                  };
-                }
-                return item;
-              }),
-            };
-          }
-        }
-        return message;
-      });
-
-      messageHistory.addToolMessages(userId, processedMessages);
+      // Simply add the messages - processing is now handled in the history layer
+      messageHistory.addToolMessages(userId, responseMessages);
     }
   } catch (error) {
     logger.error('Error adding response messages to history:', error);
@@ -193,7 +156,7 @@ export async function sendMessage(
       newMessage: finalText,
     };
   } catch (error) {
-    logger.error('sendMessage', error);
+    logger.error('sendMessage:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     // Handle output lifecycle - error

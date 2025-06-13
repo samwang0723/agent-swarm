@@ -8,7 +8,6 @@ A powerful AI Agent Swarm application built with TypeScript, featuring intellige
 
 ![Screenshot 2025-06-12 at 4 55 46 PM](https://github.com/user-attachments/assets/42b1661a-1e4e-495d-8d85-d9e8fb83f566)
 
-
 ## 🚀 Features
 
 - **🤖 AgentSwarm Integration**: Built on the AgentSwarm framework with Hive/Swarm architecture
@@ -92,6 +91,7 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
    ```
 
 3. **Set up Google OAuth**:
+
    - Create a project in [Google Cloud Console](https://console.cloud.google.com/)
    - Enable the Gmail API and Google+ API
    - Create OAuth 2.0 credentials (Client ID and Client Secret)
@@ -104,11 +104,11 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
    ```env
    # Anthropic API
    ANTHROPIC_API_KEY=your_anthropic_api_key_here
-   
+
    # Server Configuration
    PORT=3000
    NODE_ENV=development
-   
+
    # Google OAuth Configuration
    GOOGLE_CLIENT_ID=your_google_client_id
    GOOGLE_CLIENT_SECRET=your_google_client_secret
@@ -138,6 +138,7 @@ make dev
 ```
 
 The server will start on `http://localhost:3000` with:
+
 - **Web Interface**: `http://localhost:3000` - Interactive chat interface
 - **API Documentation**: `http://localhost:3000/api/v1/docs` - API documentation
 - **Authentication**: `http://localhost:3000/api/v1/auth/google` - Google OAuth login
@@ -154,32 +155,38 @@ The server will start on `http://localhost:3000` with:
 #### Authentication Endpoints
 
 **GET /api/v1/auth/google**
+
 - Initiate Google OAuth authentication
 - Redirects to Google consent screen
 
 **GET /api/v1/auth/google/callback**
+
 - Handle Google OAuth callback
 - Returns session token and user information
 
 #### Chat Endpoints (Require Authentication)
 
 **GET /api/v1/chat/history**
+
 - Get chat history for authenticated user
 - Headers: `Authorization: Bearer <token>` or session cookie
 - Response: `{ "userId": "string", "messageCount": number, "pairCount": number, "messages": [...] }`
 
 **DELETE /api/v1/chat/history**
+
 - Clear chat history for authenticated user
 - Headers: `Authorization: Bearer <token>` or session cookie
 - Response: `{ "message": "History cleared", "userId": "string" }`
 
 **POST /api/v1/chat/stream**
+
 - Streaming chat endpoint with Server-Sent Events (SSE)
 - Headers: `Authorization: Bearer <token>` or session cookie
 - Request body: `{ "message": "your message" }`
 - Response: SSE stream with real-time AI responses
 
 **POST /api/v1/chat**
+
 - Non-streaming chat endpoint
 - Headers: `Authorization: Bearer <token>` or session cookie
 - Request body: `{ "message": "your message" }`
@@ -188,6 +195,7 @@ The server will start on `http://localhost:3000` with:
 #### System Endpoints
 
 **GET /api/v1/health**
+
 - Health check endpoint with MCP server status
 - Response: `{ "status": "ok", "timestamp": "ISO-date", "mcp": {...}, "tools": {...} }`
 
@@ -230,7 +238,7 @@ The Agent Swarm now uses a **modern, configuration-driven architecture** that ma
 ### Key Components
 
 - **Configuration Layer** (`src/config/agents.ts`): Declarative agent definitions
-- **Agent Registry** (`src/agents/registry.ts`): Manages agent lifecycle and handover tools  
+- **Agent Registry** (`src/agents/registry.ts`): Manages agent lifecycle and handover tools
 - **Agent Factory** (`src/agents/factory.ts`): Singleton factory for creating agent systems
 - **Business Logic Agent** (`src/agents/business-logic.ts`): Simplified 3-line entry point
 
@@ -286,6 +294,7 @@ export const agentSystemConfig: AgentSystemConfig = {
 #### 2. Automatic Agent Creation
 
 The system automatically:
+
 - ✅ Validates configurations against available MCP servers
 - ✅ Creates specialized agents with proper MCP tool integration
 - ✅ Generates handover tools for intelligent routing
@@ -319,7 +328,9 @@ transfer_to_restaurant_recommendation: {
 Now incredibly simple - just 3 lines:
 
 ```typescript
-export default function createBusinessLogicAgent(accessToken?: string): Agent<ChatContext> {
+export default function createBusinessLogicAgent(
+  accessToken?: string
+): Agent<ChatContext> {
   const factory = AgentFactory.getInstance();
   return factory.createBusinessLogicAgent(accessToken);
 }
@@ -328,6 +339,7 @@ export default function createBusinessLogicAgent(accessToken?: string): Agent<Ch
 #### Receptionist Agent (Router)
 
 Automatically created with handover tools for all enabled agents:
+
 - Routes user queries to appropriate specialists
 - Uses routing keywords for intelligent decisions
 - Provides friendly initial responses
@@ -336,6 +348,7 @@ Automatically created with handover tools for all enabled agents:
 #### Specialized Agents
 
 Created automatically based on configuration:
+
 - **Multi-Service Agents**: Use tools from multiple MCP servers
 - **Authentication Handling**: Automatic OAuth token management
 - **Bidirectional Handovers**: Can transfer back to receptionist
@@ -351,6 +364,7 @@ const prompt = loadSystemPrompt('restaurant-recommendation');
 ```
 
 Available prompts:
+
 - `restaurant-recommendation.txt` - For restaurant recommendation agents
 - `google-assistant.txt` - For Gmail and Google services
 - `browser-booking.txt` - For browser-based booking automation
@@ -363,11 +377,12 @@ Available prompts:
 ✅ **Reliability**: Comprehensive validation prevents runtime errors  
 📊 **Observability**: Rich logging and statistics for monitoring  
 🏗️ **Scalability**: Clean architecture supports growth  
-🛡️ **Type Safety**: Full TypeScript support prevents bugs  
+🛡️ **Type Safety**: Full TypeScript support prevents bugs
 
 ### Migration from Legacy Code
 
 **Before** (120+ lines of complex code):
+
 ```typescript
 export default function createBusinessLogicAgent(accessToken?: string) {
   // Complex manual agent creation
@@ -379,14 +394,18 @@ export default function createBusinessLogicAgent(accessToken?: string) {
 ```
 
 **After** (3 lines + configuration):
+
 ```typescript
-export default function createBusinessLogicAgent(accessToken?: string): Agent<ChatContext> {
+export default function createBusinessLogicAgent(
+  accessToken?: string
+): Agent<ChatContext> {
   const factory = AgentFactory.getInstance();
   return factory.createBusinessLogicAgent(accessToken);
 }
 ```
 
 The complexity moved to:
+
 - **Declarative configuration** (`src/config/agents.ts`)
 - **Reusable registry system** (`src/agents/registry.ts`)
 - **Factory pattern** (`src/agents/factory.ts`)
@@ -397,6 +416,7 @@ The complexity moved to:
 ### Available MCP Servers
 
 #### Restaurant Booking Tools
+
 - **search_restaurants**: Search for restaurants based on location, cuisine, mood, and event type
 - **get_restaurant_details**: Get detailed information about specific restaurants
 - **get_booking_instructions**: Get reservation instructions for restaurants
@@ -404,6 +424,7 @@ The complexity moved to:
 - **make_reservation**: Attempt to make restaurant reservations
 
 #### Time Tools
+
 - Basic time and date utilities
 
 ### MCP Server Configuration
@@ -480,6 +501,7 @@ public/
 ### Key Architecture Changes
 
 **New Configuration-Driven Files:**
+
 - `src/config/agents.ts` - **Declarative agent definitions** (replaces complex code)
 - `src/agents/registry.ts` - **Agent lifecycle management** (validation, creation, routing)
 - `src/agents/factory.ts` - **Singleton factory pattern** (centralized creation)
@@ -487,10 +509,12 @@ public/
 - `src/agents/README.md` - **Comprehensive documentation** (architecture guide)
 
 **Simplified Files:**
+
 - `src/agents/business-logic.ts` - **Reduced from 120+ lines to 3 lines**
 - Agent creation now handled by configuration instead of manual code
 
 **Enhanced Structure:**
+
 - Clear separation of concerns
 - Configuration-driven approach
 - Comprehensive validation
@@ -504,7 +528,7 @@ The Agent Swarm now uses a **configuration-driven approach** that makes adding n
 ### Overview: 4 Simple Steps
 
 1. **Configure MCP Server** - Add server configuration
-2. **Create System Prompt** - Write agent instructions  
+2. **Create System Prompt** - Write agent instructions
 3. **Add Agent Configuration** - Declare agent in config
 4. **Test** - Everything else is automatic!
 
@@ -582,7 +606,8 @@ export const agentSystemConfig: AgentSystemConfig = {
       enabled: true,
       requiresAuth: false, // Set to true if authentication needed
       routingKeywords: ['service', 'help', 'support', 'your-domain'],
-      routingDescription: 'Transfer to your service agent for specialized assistance',
+      routingDescription:
+        'Transfer to your service agent for specialized assistance',
       additionalInstructions: '\n\nRemember to be extra helpful!', // Optional
     },
   ],
@@ -641,12 +666,14 @@ When you add an agent configuration, the system automatically:
 ### Migration from Legacy Approach
 
 **Before** (Old approach - 7 complex steps):
+
 - Manual agent creation with factory functions
 - Complex handover tool setup
 - Manual business logic agent modification
 - Error-prone code changes
 
 **After** (New approach - 4 simple steps):
+
 - Declarative configuration
 - Automatic validation and setup
 - No code changes required
@@ -667,6 +694,7 @@ curl http://localhost:3000/api/v1/health
 ```
 
 The system provides detailed logs showing:
+
 - Configuration validation results
 - Agent creation success/failure
 - MCP server connectivity
@@ -678,6 +706,7 @@ The system provides detailed logs showing:
 Here's a complete example of adding a weather agent:
 
 **1. MCP Server Config** (`src/config/mcp.ts`):
+
 ```typescript
 {
   name: 'weather-api',
@@ -689,6 +718,7 @@ Here's a complete example of adding a weather agent:
 ```
 
 **2. System Prompt** (`src/config/prompts/weather.txt`):
+
 ```
 You are a weather assistant that provides accurate weather information.
 Use the weather tools to get current conditions and forecasts.
@@ -696,6 +726,7 @@ Always provide temperature in both Celsius and Fahrenheit.
 ```
 
 **3. Agent Configuration** (`src/config/agents.ts`):
+
 ```typescript
 {
   id: 'weather',
@@ -711,6 +742,7 @@ Always provide temperature in both Celsius and Fahrenheit.
 ```
 
 **4. Test**:
+
 ```bash
 npm run dev
 # Try: "What's the weather like today?"
@@ -807,6 +839,7 @@ export class CustomOutput implements OutputStrategy {
 Unified function for sending messages to the AgentSwarm.
 
 **Parameters:**
+
 - `model`: LanguageModelV1 - The AI model instance
 - `message`: string - User message
 - `userId`: string - User identifier (from authentication)
@@ -847,22 +880,26 @@ Get list of all available tool names.
 ### Common Issues
 
 1. **Google OAuth Configuration**
+
    - Verify Google Client ID and Secret in environment variables
    - Check redirect URI matches Google Console configuration
    - Ensure Gmail API is enabled in Google Cloud Console
 
 2. **Authentication Issues**
+
    - Check if session token is included in requests
    - Verify Bearer token format: `Authorization: Bearer <token>`
    - Check cookie configuration for browser-based requests
 
 3. **MCP Server Connection Failed**
+
    - Check if your MCP server is running
    - Verify the URL and health endpoint in `src/config/mcp.ts`
    - Check firewall and network settings
    - Review logs for connection errors
 
 4. **Agent Not Routing Correctly**
+
    - Verify the transfer function in the business logic agent
    - Check system prompts and instructions
    - Review logs for routing decisions and tool calls

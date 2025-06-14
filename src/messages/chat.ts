@@ -135,7 +135,7 @@ export async function sendMessage(
   try {
     const result = swarm.streamText({
       messages: history,
-      returnToQueen: true,
+      returnToQueen: false,
       onStepFinish: logToolInformation,
     });
 

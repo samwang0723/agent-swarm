@@ -33,7 +33,7 @@ export const agentSystemConfig: AgentSystemConfig = {
     {
       id: 'restaurant-recommendation',
       name: 'Restaurant Recommendation Agent',
-      description: 'Handles restaurant recommendations and bookings',
+      description: 'Handles restaurant recommendations',
       mcpServers: ['restaurant-booking', 'time'],
       systemPromptFile: 'restaurant-recommendation',
       additionalInstructions:
@@ -56,7 +56,7 @@ export const agentSystemConfig: AgentSystemConfig = {
     {
       id: 'google-gmail-assistant',
       name: 'Google Gmail Assistant Agent',
-      description: 'Handles Gmail and Google services',
+      description: 'Handles Gmail query service',
       mcpServers: ['google-assistant'],
       systemPromptFile: 'google-assistant',
       enabled: true,

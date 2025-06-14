@@ -35,7 +35,7 @@ RESTAURANT SEARCH PROCESS:
   * Restaurant's signature dishes
   * Approximate pricing per person
   * Reservation options available
-  * Google Maps URL (format: https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${placeId})
+  * Google Maps URL (format: https://www.google.com/maps/search/?api=1&query=Google&query_place_id=${placeId}), DO NOT provide other website
 
 PARALLEL TOOL EXECUTION EXAMPLE:
 When a user asks for restaurant recommendations, you MUST immediately call both:

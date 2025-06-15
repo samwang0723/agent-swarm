@@ -993,6 +993,27 @@
       let messageStartTime = null;
       let currentUser = null;
 
+      async function handleAuthError(response) {
+        let message = 'Authentication failed. Please sign in again.';
+        if (response.status === 401) {
+          try {
+            const errorData = await response.json();
+            if (errorData.code === 'REFRESH_TOKEN_ERROR') {
+              message = 'Session expired. Please sign in again.';
+            } else if (errorData.message) {
+              message = errorData.message;
+            }
+          } catch (e) {
+            // ignore if response is not json
+          }
+        }
+        updateStatus(message, 'error');
+        currentUser = null;
+        updateAuthUI();
+        document.getElementById('messageInput').disabled = true;
+        document.getElementById('sendBtn').disabled = true;
+      }
+
       // Function to handle viewport height on mobile
       function setViewportHeight() {
         // We are using a CSS variable --vh to set the viewport height.
@@ -1071,16 +1092,7 @@
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
           } else {
-            const errorData = await response.text();
-            console.log('Auth check failed with response:', errorData);
-
-            currentUser = null;
-            updateAuthUI();
-            updateStatus('Please sign in to continue', 'info');
-
-            // Disable chat controls when not authenticated
-            document.getElementById('messageInput').disabled = true;
-            document.getElementById('sendBtn').disabled = true;
+            await handleAuthError(response);
           }
         } catch (error) {
           console.error('Auth check failed:', error);
@@ -1535,13 +1547,8 @@
             body: JSON.stringify({ message }),
           });
 
-          if (response.status === 401) {
-            updateStatus(
-              'Authentication expired. Please sign in again.',
-              'error'
-            );
-            currentUser = null;
-            updateAuthUI();
+          if (!response.ok) {
+            await handleAuthError(response);
             return;
           }
 
@@ -1617,13 +1624,8 @@
             credentials: 'include',
           });
 
-          if (response.status === 401) {
-            updateStatus(
-              'Authentication expired. Please sign in again.',
-              'error'
-            );
-            currentUser = null;
-            updateAuthUI();
+          if (!response.ok) {
+            await handleAuthError(response);
             return;
           }
 

@@ -14,6 +14,7 @@ export enum ErrorCodes {
   AUTH_REQUIRED = 'AUTH_REQUIRED',
   INVALID_TOKEN = 'INVALID_TOKEN',
   LOGOUT_ERROR = 'LOGOUT_ERROR',
+  REFRESH_TOKEN_ERROR = 'REFRESH_TOKEN_ERROR',
 
   // General API Errors
   INTERNAL_ERROR = 'INTERNAL_ERROR',
@@ -42,6 +43,8 @@ export const ErrorMessages = {
   [ErrorCodes.AUTH_REQUIRED]: 'Authentication required',
   [ErrorCodes.INVALID_TOKEN]: 'Invalid or expired session token',
   [ErrorCodes.LOGOUT_ERROR]: 'Logout failed',
+  [ErrorCodes.REFRESH_TOKEN_ERROR]:
+    'Failed to refresh access token. Please log in again.',
   [ErrorCodes.INTERNAL_ERROR]: 'Internal server error',
   [ErrorCodes.NOT_FOUND]: 'Resource not found',
   [ErrorCodes.VALIDATION_ERROR]: 'Validation failed',

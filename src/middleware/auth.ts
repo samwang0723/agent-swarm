@@ -8,6 +8,8 @@ export interface Session {
   picture?: string;
   sessionId: string;
   accessToken?: string;
+  refreshToken?: string;
+  tokenExpiryDate?: number;
   createdAt: Date;
 }
 

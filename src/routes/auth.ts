@@ -62,6 +62,7 @@ router.get(
     try {
       const authUrl = oauth2Client.generateAuthUrl({
         access_type: 'offline',
+        prompt: 'consent',
         scope: scopes,
         state: 'gmail-auth', // CSRF protection
         include_granted_scopes: true,
@@ -168,6 +169,12 @@ router.get(
         expiryDate: tokens.expiry_date,
       });
 
+      if (!tokens.refresh_token) {
+        logger.warn(
+          'Refresh token not received. User may need to re-authenticate for offline access.'
+        );
+      }
+
       // Set credentials on the new client instance
       callbackOAuth2Client.setCredentials(tokens);
 
@@ -255,6 +262,8 @@ router.get(
         picture: userInfo.picture || undefined,
         sessionId: chatSessionId, // Include chat session ID
         accessToken: tokens.access_token || undefined, // Store Google access token
+        refreshToken: tokens.refresh_token || undefined,
+        tokenExpiryDate: tokens.expiry_date || undefined,
       };
 
       // Generate session token and store user with session info
@@ -339,6 +348,55 @@ router.get(
 
     if (!userSession) {
       throw createAuthError(ErrorCodes.INVALID_TOKEN);
+    }
+
+    // Check if token needs refreshing
+    const isTokenExpired = userSession.tokenExpiryDate
+      ? Date.now() > userSession.tokenExpiryDate - 5 * 60 * 1000 // 5-minute buffer
+      : false;
+
+    if (isTokenExpired) {
+      if (userSession.refreshToken) {
+        try {
+          const client = new OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET,
+            redirectUri
+          );
+          client.setCredentials({
+            refresh_token: userSession.refreshToken,
+          });
+
+          logger.info('Access token expired, attempting to refresh...');
+          const { credentials } = await client.refreshAccessToken();
+          logger.info('Access token refreshed successfully');
+
+          // Update session with new token info
+          userSession.accessToken = credentials.access_token || undefined;
+          userSession.tokenExpiryDate =
+            typeof credentials.expiry_date === 'number'
+              ? credentials.expiry_date
+              : undefined;
+
+          // The session key (token) remains the same, but the session data is updated.
+          storeUserSession(token, userSession);
+        } catch (error) {
+          logger.error('Failed to refresh access token:', error);
+          // If refresh fails, the user needs to re-authenticate.
+          removeUserSession(token);
+          throw createAuthError(
+            ErrorCodes.REFRESH_TOKEN_ERROR,
+            'Session expired, please log in again.'
+          );
+        }
+      } else {
+        logger.warn('Access token expired, but no refresh token available.');
+        removeUserSession(token);
+        throw createAuthError(
+          ErrorCodes.REFRESH_TOKEN_ERROR,
+          'Session expired, please log in again.'
+        );
+      }
     }
 
     res.json({

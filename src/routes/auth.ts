@@ -5,16 +5,12 @@ import { randomUUID } from 'crypto';
 import logger from '@utils/logger';
 import {
   storeUserSession,
-  getUserSession,
   removeUserSession,
   Session,
-  refreshAccessTokenIfNeeded,
+  requireAuth,
+  AuthenticatedRequest,
 } from '../middleware/auth';
-import {
-  ApiError,
-  createAuthError,
-  createServerError,
-} from '../utils/api-error';
+import { ApiError, createServerError } from '../utils/api-error';
 import { ErrorCodes } from '../utils/error-code';
 import { asyncHandler } from '../middleware/error-handler';
 
@@ -329,30 +325,9 @@ router.get(
  */
 router.get(
   '/me',
+  requireAuth,
   asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    let token: string | undefined;
-
-    // Try to get token from Authorization header first
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    } else {
-      // Fall back to cookie
-      token = req.cookies?.session_token;
-    }
-
-    if (!token) {
-      throw createAuthError(ErrorCodes.AUTH_REQUIRED);
-    }
-
-    const userSession = getUserSession(token);
-
-    if (!userSession) {
-      throw createAuthError(ErrorCodes.INVALID_TOKEN);
-    }
-
-    // Check and refresh token if needed
-    await refreshAccessTokenIfNeeded(token, userSession);
+    const userSession = (req as AuthenticatedRequest).user;
 
     res.json({
       id: userSession.id,

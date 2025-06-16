@@ -194,11 +194,12 @@
 
       /* Icon buttons in input container */
       #sendBtn {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
         padding: 0;
-        font-size: 20px;
+        margin-right: 10px;
+        font-size: 18px;
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -804,10 +805,6 @@
           padding: 6px 10px;
         }
 
-        .user-details {
-          display: none; /* Hide name and email on mobile */
-        }
-
         .control-buttons {
           gap: 6px;
         }
@@ -1091,6 +1088,8 @@
             // Enable chat controls when authenticated
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
+            // Load chat history
+            await loadChatHistory();
           } else {
             await handleAuthError(response);
           }
@@ -1351,7 +1350,16 @@
       // Extract URLs from text
       function extractUrls(text) {
         const matches = text.match(urlRegex);
-        return matches ? [...new Set(matches)] : []; // Remove duplicates
+        if (!matches) return [];
+
+        // Clean up URLs by removing trailing punctuation that's likely sentence punctuation
+        const cleanedUrls = matches.map(url => {
+          // Remove trailing punctuation that's commonly used in sentences
+          // but preserve punctuation that might be part of the URL structure
+          return url.replace(/[.,;!?)]+$/, '');
+        });
+
+        return [...new Set(cleanedUrls)]; // Remove duplicates
       }
 
       // Create link preview element
@@ -1425,6 +1433,11 @@
           const linkPreviewResponse = await fetch(
             `https://api.linkpreview.net/?key=${key}&q=${encodeURIComponent(url)}`
           );
+          console.log(
+            'LinkPreview.net:',
+            `https://api.linkpreview.net/?key=${key}&q=${encodeURIComponent(url)}`
+          );
+          console.log('LinkPreview.net response:', linkPreviewResponse);
           if (linkPreviewResponse.ok) {
             const linkData = await linkPreviewResponse.json();
             console.log('LinkPreview.net success');
@@ -1608,6 +1621,52 @@
           document.getElementById('messageInput').disabled = false;
           document.getElementById('messageInput').focus();
           messageStartTime = null;
+        }
+      }
+
+      async function loadChatHistory() {
+        if (!isAuthenticated()) {
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/v1/chat/history', {
+            credentials: 'include',
+          });
+
+          if (!response.ok) {
+            await handleAuthError(response);
+            return;
+          }
+
+          const historyData = await response.json();
+          const chatContainer = document.getElementById('chatContainer');
+          chatContainer.innerHTML = ''; // Clear before loading
+
+          if (historyData.messages && historyData.messages.length > 0) {
+            historyData.messages.forEach(msg => {
+              // Do not display tool messages
+              if (msg.role === 'tool') {
+                return;
+              }
+
+              const isUser = msg.role === 'user';
+              let content = msg.content;
+              // Handle cases where content is an array of objects
+              if (Array.isArray(content)) {
+                content = content[0]?.text || '';
+              }
+              if (content === '') {
+                return;
+              }
+              addMessage(content, isUser);
+            });
+            updateStatus('History restored.', 'success');
+            // Scroll to bottom to show latest messages
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+          }
+        } catch (error) {
+          updateStatus(`Error loading history: ${error.message}`, 'error');
         }
       }
 

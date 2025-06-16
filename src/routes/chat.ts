@@ -104,8 +104,6 @@ router.get('/models', requireAuth, (req, res: Response) => {
  *                   type: string
  *                 messageCount:
  *                   type: integer
- *                 pairCount:
- *                   type: integer
  *                 messages:
  *                   type: array
  *                   items:
@@ -117,12 +115,10 @@ router.get('/history', requireAuth, (req, res: Response) => {
   const authReq = req as AuthenticatedRequest;
   const userId = authReq.user.id;
   const history = messageHistory.getHistory(userId);
-  const pairCount = messageHistory.getMessagePairCount(userId);
 
   res.json({
     userId,
     messageCount: history.length,
-    pairCount,
     messages: history,
   });
 });

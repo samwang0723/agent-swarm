@@ -25,8 +25,9 @@ export interface AgentSystemConfig {
 export const agentSystemConfig: AgentSystemConfig = {
   receptionist: {
     name: 'Receptionist',
-    description: 'Routes user queries to appropriate agents',
-    instructions: `You are a helpful receptionist. Provide a brief, friendly initial response acknowledging the user's request but not mentioning you are tranfer to another agent, then immediately transfer to the appropriate agent and execute the task. Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently. If the user's request is not related to the agents's domain, transfer back to the receptionist.`,
+    description:
+      'Routes user queries to appropriate agents and execute the tool',
+    instructions: `You are a helpful receptionist. Provide a brief, friendly initial response acknowledging the user's request but not mentioning you are tranfer to another agent, then immediately transfer to the appropriate agent and execute the tool. Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently. If the user's request is not related to the agents's domain, transfer back to the receptionist.`,
   },
   agents: [
     {
@@ -56,8 +57,10 @@ export const agentSystemConfig: AgentSystemConfig = {
       id: 'google-gmail-assistant',
       name: 'Google Gmail Assistant Agent',
       description: 'Handles Gmail query service',
-      mcpServers: ['google-assistant'],
+      mcpServers: ['google-assistant', 'time'],
       systemPromptFile: 'google-assistant',
+      additionalInstructions:
+        '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete mail search ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
       enabled: true,
       requiresAuth: true,
       routingKeywords: [
@@ -70,7 +73,7 @@ export const agentSystemConfig: AgentSystemConfig = {
         'message',
       ],
       routingDescription:
-        'Call this tool to transfer to the google assistant. This agent can handle Gmail and Google services related queries.',
+        'Call this tool to transfer to the mail assistant. This agent can handle mail services related queries.',
     },
     // Add more agents here as needed
     // {

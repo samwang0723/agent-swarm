@@ -14,28 +14,9 @@ function processMessage(message: Message): Message {
         content: [
           {
             type: 'text',
-            text: 'agent handover',
+            text: '',
           },
         ],
-      };
-    }
-
-    // Check if any text content is empty and replace only those items
-    const hasEmptyText = message.content.some(
-      (item: any) => item?.type === 'text' && item?.text === ''
-    );
-    if (hasEmptyText) {
-      return {
-        ...message,
-        content: message.content.map((item: any) => {
-          if (item?.type === 'text' && item?.text === '') {
-            return {
-              ...item,
-              text: 'agent handover',
-            };
-          }
-          return item;
-        }),
       };
     }
   }
@@ -45,7 +26,38 @@ function processMessage(message: Message): Message {
 // Message history management class
 class MessageHistory {
   private history: Map<string, Message[]> = new Map();
-  private readonly maxHistoryPairs = 10; // 10 user-assistant pairs (20 total messages)
+  private readonly maxMessages = 30;
+
+  /**
+   * Truncates the history for a given user if it exceeds the maximum number of messages.
+   * It ensures that the truncated history starts with a 'user' message to preserve
+   * conversation turns, while keeping the total message count at or below the maximum.
+   */
+  private truncateHistory(userId: string): void {
+    const userHistory = this.history.get(userId);
+    if (!userHistory || userHistory.length <= this.maxMessages) {
+      return;
+    }
+
+    const startIndex = userHistory.length - this.maxMessages;
+
+    // Find the first 'user' message at or after the start index to avoid
+    // cutting a conversation turn in the middle.
+    for (let i = startIndex; i < userHistory.length; i++) {
+      if (userHistory[i].role === 'user') {
+        // Found a safe place to start the history. Truncate everything before it.
+        userHistory.splice(0, i);
+        this.history.set(userId, userHistory);
+        return;
+      }
+    }
+
+    // Fallback: If no 'user' message was found in the last `maxMessages`
+    // messages (highly unlikely), truncate at the hard limit to prevent
+    // unbounded growth. This might break a turn but respects the memory limit.
+    userHistory.splice(0, startIndex);
+    this.history.set(userId, userHistory);
+  }
 
   /**
    * Get message history for a specific user
@@ -63,6 +75,7 @@ class MessageHistory {
     const userHistory = this.getHistory(userId);
     userHistory.push({ role: 'user', content: message });
     this.history.set(userId, userHistory);
+    this.truncateHistory(userId);
   }
 
   /**
@@ -71,15 +84,8 @@ class MessageHistory {
   addAssistantMessage(userId: string, message: string): void {
     const userHistory = this.getHistory(userId);
     userHistory.push({ role: 'assistant', content: message });
-
-    // Ensure we don't exceed the maximum history pairs
-    // Each pair consists of 1 user + 1 assistant message
-    if (userHistory.length > this.maxHistoryPairs * 2) {
-      // Remove the oldest pair (2 messages)
-      userHistory.splice(0, 2);
-    }
-
     this.history.set(userId, userHistory);
+    this.truncateHistory(userId);
   }
 
   /**
@@ -91,6 +97,7 @@ class MessageHistory {
     const processedMessages = toolMessages.map(processMessage);
     userHistory.push(...processedMessages);
     this.history.set(userId, userHistory);
+    this.truncateHistory(userId);
   }
 
   /**
@@ -98,13 +105,6 @@ class MessageHistory {
    */
   clearHistory(userId: string): void {
     this.history.delete(userId);
-  }
-
-  /**
-   * Get the number of message pairs for a user
-   */
-  getMessagePairCount(userId: string): number {
-    return Math.floor(this.getHistory(userId).length / 2);
   }
 }
 

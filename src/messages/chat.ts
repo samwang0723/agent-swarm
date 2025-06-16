@@ -133,6 +133,7 @@ export async function sendMessage(
   }
 
   try {
+    logger.info('Sending message to swarm', history);
     const result = swarm.streamText({
       messages: history,
       returnToQueen: false,

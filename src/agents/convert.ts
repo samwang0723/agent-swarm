@@ -2,6 +2,7 @@ import { Tool } from 'ai';
 import { AgentFunctionTool } from 'agentswarm';
 import logger from '@utils/logger';
 import { toolRegistry } from '@tools/index';
+import { parseUberEatsStores } from './parser';
 
 /**
  * Converts serverTools (Tool objects from 'ai' library) to AgentFunctionTool format
@@ -40,9 +41,13 @@ export function convertToAgentTools(
             };
 
             const result = await tool.execute(args, toolOptions);
+            let finalResult = result;
+            if (typeof result === 'string') {
+              finalResult = parseUberEatsStores(result);
+            }
 
             // Ensure we return the result in a consistent format
-            return { result: result, context: {} };
+            return { result: finalResult, context: {} };
           }
 
           const error = `Tool ${toolName} has no execute function`;

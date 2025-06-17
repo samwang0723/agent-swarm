@@ -1481,7 +1481,14 @@
 
       // Add link previews to a message element
       async function addLinkPreviews(messageElement, content) {
-        const urls = extractUrls(content);
+        const urls = extractUrls(content).filter(url => {
+          try {
+            return !new URL(url).hostname.includes('ubereats.com');
+          } catch (e) {
+            // Keep urls that can't be parsed, they will be handled downstream
+            return true;
+          }
+        });
 
         if (urls.length === 0) return;
 

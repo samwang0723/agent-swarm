@@ -10,6 +10,7 @@ import {
   getAvailableModels,
 } from '@config/models';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { initializeSwarm } from '@/agents/swarm-manager';
 
 const router: Router = express.Router();
 
@@ -157,6 +158,36 @@ router.delete('/history', requireAuth, (req, res: Response) => {
   const userId = authReq.user.id;
   messageHistory.clearHistory(userId);
   res.json({ message: 'History cleared', userId });
+});
+
+/**
+ * @swagger
+ * /api/v1/chat/init:
+ *   post:
+ *     summary: Initialize the chat swarm for the user session
+ *     tags: [Chat]
+ *     security:
+ *       - BearerAuth: []
+ *       - CookieAuth: []
+ *     responses:
+ *       200:
+ *         description: Swarm initialized successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Unauthorized - authentication required
+ */
+router.post('/init', requireAuth, (req, res: Response) => {
+  const authReq = req as AuthenticatedRequest;
+  initializeSwarm(authReq.user, model);
+  res.status(200).json({ success: true, message: 'Swarm initialized' });
 });
 
 /**

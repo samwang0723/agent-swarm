@@ -1088,8 +1088,9 @@
             // Enable chat controls when authenticated
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
-            // Load chat history
-            await loadChatHistory();
+
+            // Pre-warm the swarm and load history concurrently
+            await Promise.all([initializeSwarm(), loadChatHistory()]);
           } else {
             await handleAuthError(response);
           }
@@ -1524,6 +1525,25 @@
               messageElement.replaceChild(errorPreview, loadingElements[i]);
             }
           }
+        }
+      }
+
+      async function initializeSwarm() {
+        if (!isAuthenticated()) return;
+        try {
+          console.log('Pre-warming the agent swarm...');
+          const response = await fetch('/api/v1/chat/init', {
+            method: 'POST',
+            credentials: 'include',
+          });
+
+          if (response.ok) {
+            console.log('Swarm pre-warmed successfully.');
+          } else {
+            console.warn('Swarm pre-warming failed or was not needed.');
+          }
+        } catch (error) {
+          console.error('Error during swarm pre-warming:', error);
         }
       }
 

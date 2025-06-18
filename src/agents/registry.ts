@@ -5,6 +5,7 @@ import { loadSystemPrompt } from '@/messages/prompt';
 import { AgentConfig, AgentSystemConfig } from '@/config/agents';
 import logger from '@/utils/logger';
 import { toolRegistry } from '@/tools';
+import { createModelByKey } from '@/config/models';
 import { validateAgentSystemConfig, logAgentSystemInfo } from './utils';
 
 export interface HandoverTool {
@@ -154,11 +155,16 @@ export class AgentRegistry {
       tools[toolName] = tool;
     }
 
+    const modelInstance = createModelByKey(this.config.receptionist.model);
+
     this.receptionistAgent = new Agent<ChatContext>({
       name: this.config.receptionist.name,
       description: this.config.receptionist.description,
       instructions: this.config.receptionist.instructions,
       tools,
+      model: modelInstance,
+      maxTurns: 10,
+      temperature: 0.7,
     });
 
     logger.info(

@@ -9,12 +9,14 @@ export interface AgentConfig {
   requiresAuth?: boolean;
   routingKeywords?: string[];
   routingDescription?: string;
+  model?: string;
 }
 
 export interface ReceptionistConfig {
   name: string;
   description: string;
   instructions: string;
+  model?: string;
 }
 
 export interface AgentSystemConfig {
@@ -27,7 +29,11 @@ export const agentSystemConfig: AgentSystemConfig = {
     name: 'Receptionist',
     description:
       'Routes user queries to appropriate agents and execute the tool',
-    instructions: `You are a helpful receptionist. Provide a brief, friendly initial response acknowledging the user's request but not mentioning you are tranfer to another agent, then immediately transfer to the appropriate agent and execute the tool. Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently. If the user's request is not related to the agents's domain, transfer back to the receptionist.`,
+    instructions: `You are a helpful receptionist. Provide a brief, friendly initial response acknowledging the user's request but NO MENTIONING you are tranfer to another agent.
+    - If user's request fit into known agents' domain, IMMEDIATELY transfer to the appropriate agent and execute the tool. 
+    - Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently. 
+    - MUST ensure the handover executing the tools instead of stopping the conversation.`,
+    model: 'gemini-2.0-flash',
   },
   agents: [
     {
@@ -36,6 +42,7 @@ export const agentSystemConfig: AgentSystemConfig = {
       description: 'Handles restaurant recommendations',
       mcpServers: ['restaurant-booking', 'time'],
       systemPromptFile: 'restaurant-recommendation',
+      model: 'claude-3-5-sonnet',
       additionalInstructions:
         '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete restaurant recommendation ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
       enabled: true,
@@ -58,6 +65,7 @@ export const agentSystemConfig: AgentSystemConfig = {
       description: 'Handles Gmail query service',
       mcpServers: ['google-assistant', 'time'],
       systemPromptFile: 'google-assistant',
+      model: 'gemini-2.5-flash',
       additionalInstructions:
         '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete mail search ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
       enabled: true,
@@ -72,6 +80,9 @@ export const agentSystemConfig: AgentSystemConfig = {
       description: 'Handles food delivery platform search automation',
       mcpServers: ['browser'],
       systemPromptFile: 'food-delivery',
+      model: 'gemini-2.0-flash',
+      additionalInstructions:
+        '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete result ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
       enabled: true,
       requiresAuth: false,
       routingKeywords: [

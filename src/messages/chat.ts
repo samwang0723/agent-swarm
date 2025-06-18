@@ -44,7 +44,7 @@ function logToolInformation(event: any) {
       event.toolResults.map((tr: any) => {
         const jsonStr = JSON.stringify(tr.result);
         const truncated =
-          jsonStr.length > 100 ? jsonStr.slice(0, 100) + '...' : jsonStr;
+          jsonStr.length > 100 ? jsonStr.slice(0, 300) + '...' : jsonStr;
         return `${tr.toolName}: ${truncated}`;
       })
     );

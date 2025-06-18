@@ -15,6 +15,11 @@ const router: Router = express.Router();
 
 // Initialize the model using the configuration handler
 const model = createModel();
+if (!model) {
+  throw new Error(
+    'Failed to initialize language model. Please check your configuration and API keys.'
+  );
+}
 
 // Log current model information
 const modelInfo = getCurrentModelInfo();

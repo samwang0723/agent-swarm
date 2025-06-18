@@ -1,5 +1,6 @@
 import { Agent } from 'agentswarm';
 import { toolRegistry } from '@tools/index';
+import { createModelByKey } from '@/config/models';
 import { convertToAgentTools, convertMultiServerToAgentTools } from './convert';
 
 export interface ChatContext {
@@ -10,7 +11,8 @@ export interface ChatContext {
 // Using tools from multiple servers
 const createMultiServiceAgent = (
   serverNames: string[] = [],
-  systemPrompt?: string
+  systemPrompt?: string,
+  model?: string
 ) => {
   const toolsByServer = toolRegistry.getToolsByServerMap();
   const availableServers = toolRegistry.getServerNames();
@@ -36,7 +38,7 @@ const createMultiServiceAgent = (
   });
 
   const combinedTools = convertMultiServerToAgentTools(serverToolsMap);
-  // logger.info(`combinedTools: ${JSON.stringify(combinedTools)}`);
+  const modelInstance = createModelByKey(model);
 
   return new Agent<ChatContext>({
     name: 'multi-service',
@@ -47,13 +49,14 @@ const createMultiServiceAgent = (
         ', '
       )}. Available tools from these services allow you to help users with various tasks.`,
     tools: combinedTools,
+    model: modelInstance,
     maxTurns: 10,
     temperature: 0.7,
   });
 };
 
 // Conditional tool assignment based on available servers
-const createAdaptiveAgent = (systemPrompt?: string) => {
+const createAdaptiveAgent = (systemPrompt?: string, model?: string) => {
   const availableServers = toolRegistry.getServerNames();
   const serverToolsMap: Record<string, Record<string, any>> = {};
 
@@ -64,6 +67,7 @@ const createAdaptiveAgent = (systemPrompt?: string) => {
   });
 
   const tools = convertMultiServerToAgentTools(serverToolsMap);
+  const modelInstance = createModelByKey(model);
 
   return new Agent<ChatContext>({
     name: 'adaptive-agent',
@@ -74,6 +78,7 @@ const createAdaptiveAgent = (systemPrompt?: string) => {
         ', '
       )}`,
     tools: tools,
+    model: modelInstance,
     maxTurns: 10,
     temperature: 0.7,
   });
@@ -83,7 +88,8 @@ const createAdaptiveAgent = (systemPrompt?: string) => {
 const createSinglePurposeAgent = (
   serverName: string,
   systemPrompt?: string,
-  agentName?: string
+  agentName?: string,
+  model?: string
 ) => {
   if (!toolRegistry.getServerNames().includes(serverName)) {
     throw new Error(`MCP server '${serverName}' is not available`);
@@ -92,6 +98,8 @@ const createSinglePurposeAgent = (
   const serverTools = toolRegistry.getServerTools(serverName);
   const toolNames = toolRegistry.getServerToolNames(serverName);
   const convertedTools = convertToAgentTools(serverTools, serverName);
+
+  const modelInstance = createModelByKey(model);
 
   return new Agent<ChatContext>({
     name: agentName || `${serverName}-agent`,
@@ -102,6 +110,7 @@ const createSinglePurposeAgent = (
         ', '
       )}`,
     tools: convertedTools,
+    model: modelInstance,
     maxTurns: 10,
     temperature: 0.7,
   });

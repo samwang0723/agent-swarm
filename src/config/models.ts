@@ -3,6 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import logger from '@utils/logger';
 import dotenv from 'dotenv';
+import { LanguageModelV1 } from 'ai';
 
 dotenv.config();
 
@@ -47,21 +48,25 @@ const MODEL_CONFIGS: Record<string, ModelConfig> = {
     baseURL: 'https://generativelanguage.googleapis.com/v1beta',
     apiKey: process.env.GOOGLE_API_KEY,
   },
+  'gemini-2.0-flash': {
+    provider: 'google',
+    modelName: 'gemini-2.0-flash',
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta',
+    apiKey: process.env.GOOGLE_API_KEY,
+  },
 };
 
-// Get the current model from environment variable or default
-const getCurrentModelKey = (): string => {
-  return process.env.LLM_MODEL || 'claude-3-5-sonnet';
-};
+// Create a model instance from a given key
+export const createModelByKey = (
+  modelKey?: string
+): LanguageModelV1 | undefined => {
+  if (!modelKey) return undefined;
 
-// Create and configure the model instance
-export const createModel = () => {
-  const modelKey = getCurrentModelKey();
   const config = MODEL_CONFIGS[modelKey];
 
   if (!config) {
     const availableModels = Object.keys(MODEL_CONFIGS).join(', ');
-    const error = `Unknown model: ${modelKey}. Available models: ${availableModels}`;
+    const error = `Unknown model key: ${modelKey}. Available models: ${availableModels}`;
     logger.error(error);
     throw new Error(error);
   }
@@ -73,37 +78,35 @@ export const createModel = () => {
         : config.provider === 'google'
           ? 'GOOGLE_API_KEY'
           : 'OPENAI_API_KEY';
-    const error = `Missing API key for ${config.provider}. Please set ${envVar} environment variable.`;
+    const error = `Missing API key for ${config.provider} (model: ${modelKey}). Please set ${envVar} environment variable.`;
     logger.error(error);
     throw new Error(error);
   }
 
   logger.info(
-    `Initializing LLM model: ${config.modelName} (${config.provider})`
+    `Initializing LLM model: ${config.modelName} (${config.provider}) from key: ${modelKey}`
   );
 
   try {
     switch (config.provider) {
       case 'anthropic': {
         const anthropic = createAnthropic({
-          baseURL: config.baseURL,
           apiKey: config.apiKey,
         });
-        const model = anthropic(config.modelName);
+        const model = anthropic(config.modelName as any);
         logger.info(
-          `✅ Anthropic model ${config.modelName} initialized successfully`
+          `✅ Anthropic model ${config.modelName} initialized successfully for key ${modelKey}`
         );
         return model;
       }
       case 'openai': {
         const openai = createOpenAI({
-          baseURL: config.baseURL,
           apiKey: config.apiKey,
           compatibility: 'strict',
         });
-        const model = openai(config.modelName);
+        const model = openai(config.modelName as any);
         logger.info(
-          `✅ OpenAI model ${config.modelName} initialized successfully`
+          `✅ OpenAI model ${config.modelName} initialized successfully for key ${modelKey}`
         );
         return model;
       }
@@ -111,9 +114,9 @@ export const createModel = () => {
         const google = createGoogleGenerativeAI({
           apiKey: config.apiKey,
         });
-        const model = google(`models/${config.modelName}`);
+        const model = google(`models/${config.modelName}` as any);
         logger.info(
-          `✅ Google model models/${config.modelName} initialized successfully`
+          `✅ Google model models/${config.modelName} initialized successfully for key ${modelKey}`
         );
         return model;
       }
@@ -127,10 +130,21 @@ export const createModel = () => {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
     logger.error(
-      `Failed to initialize model ${config.modelName}: ${errorMessage}`
+      `Failed to initialize model ${config.modelName} for key ${modelKey}: ${errorMessage}`
     );
     throw error;
   }
+};
+
+// Get the current model from environment variable or default
+const getCurrentModelKey = (): string => {
+  return process.env.LLM_MODEL || 'claude-3-5-sonnet';
+};
+
+// Create and configure the model instance
+export const createModel = () => {
+  const modelKey = getCurrentModelKey();
+  return createModelByKey(modelKey);
 };
 
 // Get current model information for logging/debugging

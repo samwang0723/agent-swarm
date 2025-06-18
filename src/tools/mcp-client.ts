@@ -199,44 +199,58 @@ export class McpClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
-    const response = await fetch(this.config.url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'tools/call',
-        params: { name, arguments: parameters },
-        id: Date.now(),
-      }),
-      signal: AbortSignal.timeout(30000),
-    });
+    try {
+      const response = await fetch(this.config.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: { name, arguments: parameters },
+          id: Date.now(),
+        }),
+        signal: AbortSignal.timeout(
+          parseInt(process.env.MCP_TIMEOUT || '30000')
+        ),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Tool call failed: ${response.status} ${response.statusText} - ${errorText}`
-      );
-    }
-
-    // Handle both JSON and SSE responses
-    const responseText = await response.text();
-    const result = this.parseResponse(responseText);
-
-    if (result.error) {
-      throw new Error(`Tool execution error: ${result.error.message}`);
-    }
-
-    // Handle MCP response format
-    if (result.result?.content?.[0]?.type === 'text') {
-      const text = result.result.content[0].text;
-      try {
-        return JSON.parse(text);
-      } catch {
-        return text;
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Tool call failed: ${response.status} ${response.statusText} - ${errorText}`
+        );
       }
-    }
 
-    return result.result;
+      // Handle both JSON and SSE responses
+      const responseText = await response.text();
+      const result = this.parseResponse(responseText);
+
+      if (result.error) {
+        throw new Error(`Tool execution error: ${result.error.message}`);
+      }
+
+      // Handle MCP response format
+      if (result.result?.content?.[0]?.type === 'text') {
+        const text = result.result.content[0].text;
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      }
+
+      return result.result;
+    } catch (error: any) {
+      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+        const timeout = parseInt(process.env.MCP_TIMEOUT || '30000') / 1000;
+        const errorMessage = `The tool call to '${name}' timed out after ${timeout} seconds. Please try again later.`;
+        logger.error(errorMessage);
+        return {
+          error: errorMessage,
+        };
+      }
+      throw error;
+    }
   }
 
   getAvailableTools(): Tool[] {

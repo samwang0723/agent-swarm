@@ -7,14 +7,21 @@ import { Message } from '@messages/types';
 // }
 function processMessage(message: Message): Message {
   if (message.role === 'assistant' && Array.isArray(message.content)) {
-    // Handle empty content array
-    if (message.content.length === 0) {
+    // An array of content parts is considered empty if it's actually empty
+    // or only contains text parts with empty strings.
+    const isEmpty =
+      message.content.length === 0 ||
+      message.content.every(
+        part => part.type === 'text' && part.text.trim() === ''
+      );
+
+    if (isEmpty) {
       return {
         ...message,
         content: [
           {
             type: 'text',
-            text: '',
+            text: ' ', // Use a space to ensure the content is not empty.
           },
         ],
       };

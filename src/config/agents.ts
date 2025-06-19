@@ -33,7 +33,7 @@ export const agentSystemConfig: AgentSystemConfig = {
     - If user's request fit into known agents' domain, IMMEDIATELY transfer to the appropriate agent and execute the tool. 
     - Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently. 
     - MUST ensure the handover executing the tools instead of stopping the conversation.`,
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
   },
   agents: [
     {

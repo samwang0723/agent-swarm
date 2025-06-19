@@ -164,7 +164,6 @@ export class AgentRegistry {
       tools,
       model: modelInstance,
       maxTurns: 10,
-      temperature: 0.7,
     });
 
     logger.info(

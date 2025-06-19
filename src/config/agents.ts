@@ -33,7 +33,7 @@ export const agentSystemConfig: AgentSystemConfig = {
     - If user's request fit into known agents' domain, IMMEDIATELY transfer to the appropriate agent and execute the tool. 
     - Do not provide any commentary about the transfer process or tool usage - let the specialist agent handle the task silently. 
     - MUST ensure the handover executing the tools instead of stopping the conversation.`,
-    model: 'gemini-2.5-flash',
+    model: 'claude-3-5-sonnet',
   },
   agents: [
     {
@@ -65,7 +65,7 @@ export const agentSystemConfig: AgentSystemConfig = {
       description: 'Handles Gmail query service',
       mcpServers: ['google-assistant', 'time'],
       systemPromptFile: 'google-assistant',
-      model: 'gemini-2.5-flash',
+      model: 'claude-3-5-sonnet',
       additionalInstructions:
         '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete mail search ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
       enabled: true,
@@ -80,7 +80,7 @@ export const agentSystemConfig: AgentSystemConfig = {
       description: 'Handles food delivery platform search automation',
       mcpServers: ['browser'],
       systemPromptFile: 'food-delivery',
-      model: 'gemini-2.0-flash',
+      model: 'claude-3-5-sonnet',
       additionalInstructions:
         '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete result ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
       enabled: true,

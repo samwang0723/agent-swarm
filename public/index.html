@@ -292,6 +292,12 @@
         animation: pulse 1.5s infinite;
       }
 
+      .assistant-message .error-text {
+        color: #fa788b;
+        font-style: italic;
+        font-size: 0.9em;
+      }
+
       @keyframes pulse {
         0%,
         100% {
@@ -1332,19 +1338,27 @@
         return messageDiv;
       }
 
-      function updateStreamingMessage(content) {
+      function updateStreamingMessage(content, isError = false) {
         const streamingDiv = document.getElementById('streaming-message');
         if (streamingDiv) {
           const timeDiv = document.createElement('div');
           timeDiv.className = 'message-time';
           timeDiv.textContent = formatTime();
 
-          streamingDiv.innerHTML = parseMarkdown(content);
+          if (isError) {
+            streamingDiv.innerHTML = `<span class="error-text">${sanitizeHtml(
+              content
+            )}</span>`;
+          } else {
+            streamingDiv.innerHTML = parseMarkdown(content);
+          }
           streamingDiv.appendChild(timeDiv);
           streamingDiv.removeAttribute('id');
 
-          // Check for links and add previews
-          addLinkPreviews(streamingDiv, content);
+          // Check for links and add previews, but not for errors
+          if (!isError) {
+            addLinkPreviews(streamingDiv, content);
+          }
         }
       }
 
@@ -1627,6 +1641,10 @@
                       updateLatency(totalLatency);
                     }
                     updateStreamingMessage(accumulatedText);
+                  }
+                  if (data.error) {
+                    updateStatus(`Error: ${data.error}`, 'error');
+                    updateStreamingMessage(data.error, true);
                   }
                 } catch (e) {
                   // Ignore JSON parse errors from incomplete chunks

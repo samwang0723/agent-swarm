@@ -12,7 +12,8 @@ export interface ChatContext {
 const createMultiServiceAgent = (
   serverNames: string[] = [],
   systemPrompt?: string,
-  model?: string
+  model?: string,
+  extraTools: Record<string, any> = {}
 ) => {
   const toolsByServer = toolRegistry.getToolsByServerMap();
   const availableServers = toolRegistry.getServerNames();
@@ -37,7 +38,8 @@ const createMultiServiceAgent = (
     serverToolsMap[serverName] = serverTools;
   });
 
-  const combinedTools = convertMultiServerToAgentTools(serverToolsMap);
+  const convertedTools = convertMultiServerToAgentTools(serverToolsMap);
+  const combinedTools = { ...convertedTools, ...extraTools };
   const modelInstance = createModelByKey(model);
 
   return new Agent<ChatContext>({
@@ -51,7 +53,6 @@ const createMultiServiceAgent = (
     tools: combinedTools,
     model: modelInstance,
     maxTurns: 10,
-    temperature: 0.7,
   });
 };
 
@@ -80,7 +81,6 @@ const createAdaptiveAgent = (systemPrompt?: string, model?: string) => {
     tools: tools,
     model: modelInstance,
     maxTurns: 10,
-    temperature: 0.7,
   });
 };
 
@@ -112,7 +112,6 @@ const createSinglePurposeAgent = (
     tools: convertedTools,
     model: modelInstance,
     maxTurns: 10,
-    temperature: 0.7,
   });
 };
 

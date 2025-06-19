@@ -46,7 +46,9 @@ export class SSEOutput implements SSEOutputStrategy {
 
   onError(error: string): void {
     if (!this.isEnded) {
-      this.safeWrite(`event: error\ndata: ${JSON.stringify({ error })}\n\n`);
+      this.safeWrite(
+        `event: error\ndata: ${JSON.stringify({ error: error })}\n\n`
+      );
       this.isEnded = true;
       try {
         this.response.end();

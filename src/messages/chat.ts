@@ -48,9 +48,17 @@ export async function sendMessage(
   try {
     outputStrategy.onStart?.({ sessionId: session.id, streaming: true });
     // logger.info('Sending message to swarm', history);
+    // logger.info('Swarm queen', swarm.queen);
+    // logger.info('Swarm active agent', swarm.activeAgent);
+
+    // manual override to use the queen as the active agent as returnToQueen sometimes doesn't work
+    // Only use for Gemini models
+    if (model.modelId.includes('gemini')) {
+      swarm.setActiveAgent(swarm.queen);
+    }
     const result = swarm.streamText({
       messages: history,
-      returnToQueen: false,
+      returnToQueen: model.modelId.includes('gemini'),
       onStepFinish: event => logToolInformation(session.id, event),
     });
 

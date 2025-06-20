@@ -1,22 +1,22 @@
 import { LanguageModelV1 } from 'ai';
-import { Hive, Swarm } from 'agentswarm';
 import { ChatContext } from '@/agents';
 import createBusinessLogicAgent from '@/agents/business-logic';
 import logger from '@utils/logger';
 import { calculateCost } from '@/utils/costs';
 import { getCurrentModelInfo } from '@/config/models';
 import { Session } from '@/middleware/auth';
+import { ExtendedHive, ExtendedSwarm } from './extended-swarm';
 
 // Cache for swarms to persist across messages
-export const swarmCache = new Map<string, Swarm<ChatContext>>();
+export const swarmCache = new Map<string, ExtendedSwarm<ChatContext>>();
 export const sessionCostCache = new Map<string, number>();
 
 // Helper function to create and configure the swarm
 function createHiveSwarm(
   model: LanguageModelV1,
   accessToken?: string
-): Swarm<ChatContext> {
-  const hive = new Hive<ChatContext>({
+): ExtendedSwarm<ChatContext> {
+  const hive = new ExtendedHive<ChatContext>({
     queen: createBusinessLogicAgent(accessToken),
     defaultModel: model,
     defaultContext: { topic: null },
@@ -54,6 +54,7 @@ export function logTokenUsage(
 
 // Helper function to log tool information
 export function logToolInformation(sessionId: string, event: any) {
+  // logger.info('Event:', event);
   logTokenUsage(sessionId, event.usage);
   logger.info(
     `Step finished - Type: ${event.stepType}, Tools: ${
@@ -86,7 +87,7 @@ export function logToolInformation(sessionId: string, event: any) {
 export function getOrCreateSwarm(
   session: Session,
   model: LanguageModelV1
-): Swarm<ChatContext> {
+): ExtendedSwarm<ChatContext> {
   let swarm = swarmCache.get(session.id);
   if (!swarm) {
     logger.info(`Creating new swarm for session ${session.id}`);

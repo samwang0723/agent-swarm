@@ -8,8 +8,3 @@ export interface OutputStrategy {
   onFinish?: (data: { complete: boolean; sessionId: string }) => void;
   onError?: (error: string) => void;
 }
-
-export interface SSEOutputStrategy extends OutputStrategy {
-  response: any; // Express Response object
-  sessionId: string;
-}

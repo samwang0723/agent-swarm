@@ -1,4 +1,5 @@
-import { Request, Response, NextFunction } from 'express';
+import { Context, Next } from 'hono';
+import { getCookie } from 'hono/cookie';
 import logger from '@utils/logger';
 import { google } from 'googleapis';
 import { AgentFactory } from '../agents/factory';
@@ -22,18 +23,13 @@ export interface AuthenticatedRequest extends Request {
   user: Session;
 }
 
-/**
- * Simple session-based authentication middleware
- * This is a basic implementation - replace with proper JWT/database storage in production
- */
-
-// Simple in-memory storage for demo - replace with proper database
+// In-memory storage for user sessions
 const userSessions = new Map<string, Session>();
 
 /**
  * Store user session
  */
-export const storeUserSession = (token: string, user: Session) => {
+export const storeUserSession = (token: string, user: Session): void => {
   userSessions.set(token, {
     ...user,
     createdAt: new Date(),
@@ -43,14 +39,14 @@ export const storeUserSession = (token: string, user: Session) => {
 /**
  * Get user session
  */
-export const getUserSession = (token: string) => {
+export const getUserSession = (token: string): Session | undefined => {
   return userSessions.get(token);
 };
 
 /**
  * Remove user session
  */
-export const removeUserSession = (token: string) => {
+export const removeUserSession = (token: string): boolean => {
   return userSessions.delete(token);
 };
 
@@ -122,75 +118,56 @@ export const refreshAccessTokenIfNeeded = async (
 };
 
 /**
- * Authentication middleware - protects routes that require authentication
+ * Authentication middleware for Hono
  */
-export const requireAuth = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    let token: string | undefined;
+export const requireAuth = async (c: Context, next: Next): Promise<void> => {
+  let token: string | undefined;
 
-    // Try to get token from Authorization header first
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    } else {
-      // Fall back to cookie
-      token = req.cookies?.session_token;
-    }
-
-    if (!token) {
-      throw createAuthError(ErrorCodes.AUTH_REQUIRED);
-    }
-
-    const userSession = getUserSession(token);
-
-    if (!userSession) {
-      throw createAuthError(ErrorCodes.INVALID_TOKEN);
-    }
-
-    // Check and refresh token if needed
-    await refreshAccessTokenIfNeeded(token, userSession);
-
-    (req as AuthenticatedRequest).user = userSession;
-    next();
-  } catch (error) {
-    next(error);
+  const authHeader = c.req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else {
+    token = getCookie(c, 'auth_token');
   }
+
+  if (!token) {
+    throw createAuthError(ErrorCodes.AUTH_REQUIRED);
+  }
+
+  const userSession = getUserSession(token);
+
+  if (!userSession) {
+    throw createAuthError(ErrorCodes.INVALID_TOKEN);
+  }
+
+  await refreshAccessTokenIfNeeded(token, userSession);
+
+  c.set('user', userSession);
+  await next();
 };
 
 /**
- * Optional authentication middleware - allows both authenticated and unauthenticated requests
+ * Optional authentication middleware for Hono
  */
-export const optionalAuth = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+export const optionalAuth = async (c: Context, next: Next): Promise<void> => {
   try {
     let token: string | undefined;
 
-    // Try to get token from Authorization header first
-    const authHeader = req.headers.authorization;
+    const authHeader = c.req.header('Authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
     } else {
-      // Fall back to cookie
-      token = req.cookies?.session_token;
+      token = getCookie(c, 'auth_token');
     }
 
     if (token) {
       const userSession = getUserSession(token);
       if (userSession) {
-        (req as AuthenticatedRequest).user = userSession;
+        c.set('user', userSession);
       }
     }
-
-    next();
   } catch (error) {
     logger.error('Optional authentication middleware error:', error);
-    next(); // Continue even on error for optional auth
   }
+  await next();
 };

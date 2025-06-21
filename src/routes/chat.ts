@@ -1,18 +1,26 @@
-import express, { Response, Router } from 'express';
+import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { messageHistory } from '@messages/history';
 import { sendMessage } from '@messages/chat';
-import { SSEOutput } from '@messages/output-strategies';
+import { HonoSSEOutput } from '@messages/output-strategies';
 import { OutputStrategy } from '@messages/types';
+import { Session } from '@/middleware/auth';
 import logger from '@utils/logger';
 import {
   createModel,
   getCurrentModelInfo,
   getAvailableModels,
 } from '@config/models';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 import { initializeSwarm } from '@/agents/swarm-manager';
 
-const router: Router = express.Router();
+type Env = {
+  Variables: {
+    user: Session;
+  };
+};
+
+const app = new Hono<Env>();
 
 // Initialize the model using the configuration handler
 const model = createModel();
@@ -72,20 +80,23 @@ logger.info(
  *       401:
  *         description: Unauthorized - authentication required
  */
-router.get('/models', requireAuth, (req, res: Response) => {
+app.get('/models', requireAuth, c => {
   try {
     const current = getCurrentModelInfo();
     const available = getAvailableModels();
 
-    res.json({
+    return c.json({
       current,
       available,
     });
   } catch (error) {
     logger.error('Error retrieving model information:', error);
-    res.status(500).json({
-      error: 'Failed to retrieve model information',
-    });
+    return c.json(
+      {
+        error: 'Failed to retrieve model information',
+      },
+      500
+    );
   }
 });
 
@@ -117,13 +128,12 @@ router.get('/models', requireAuth, (req, res: Response) => {
  *       401:
  *         description: Unauthorized - authentication required
  */
-router.get('/history', requireAuth, (req, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  const userId = authReq.user.id;
-  const history = messageHistory.getHistory(userId);
+app.get('/history', requireAuth, c => {
+  const user = c.get('user');
+  const history = messageHistory.getHistory(user.id);
 
-  res.json({
-    userId,
+  return c.json({
+    userId: user.id,
     messageCount: history.length,
     messages: history,
   });
@@ -153,11 +163,10 @@ router.get('/history', requireAuth, (req, res: Response) => {
  *       401:
  *         description: Unauthorized - authentication required
  */
-router.delete('/history', requireAuth, (req, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  const userId = authReq.user.id;
-  messageHistory.clearHistory(userId);
-  res.json({ message: 'History cleared', userId });
+app.delete('/history', requireAuth, c => {
+  const user = c.get('user');
+  messageHistory.clearHistory(user.id);
+  return c.json({ message: 'History cleared', userId: user.id });
 });
 
 /**
@@ -184,10 +193,10 @@ router.delete('/history', requireAuth, (req, res: Response) => {
  *       401:
  *         description: Unauthorized - authentication required
  */
-router.post('/init', requireAuth, (req, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  initializeSwarm(authReq.user, model);
-  res.status(200).json({ success: true, message: 'Swarm initialized' });
+app.post('/init', requireAuth, c => {
+  const user = c.get('user');
+  initializeSwarm(user, model);
+  return c.json({ success: true, message: 'Swarm initialized' });
 });
 
 /**
@@ -225,55 +234,33 @@ router.post('/init', requireAuth, (req, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.post('/stream', requireAuth, async (req, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  const userId = authReq.user.id;
-  const { message } = authReq.body;
+app.post('/stream', requireAuth, async c => {
+  const user = c.get('user');
+  const { message } = await c.req.json();
 
   if (!message || typeof message !== 'string') {
-    res.status(400).json({ error: 'Message is required and must be a string' });
-    return;
+    return c.json({ error: 'Message is required and must be a string' }, 400);
   }
 
-  // Set headers for Server-Sent Events
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Cache-Control',
-  });
-
-  try {
+  return streamSSE(c, async stream => {
     // Create SSE output strategy
-    const sseOutput = new SSEOutput(res, userId);
+    const sseOutput = new HonoSSEOutput(stream, user.id);
 
-    // Use the unified sendMessage function with SSE output
-    await sendMessage(authReq.user, model, message, sseOutput);
-  } catch (error) {
-    logger.error('Chat error:', error);
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-
-    // Only write error if response is still writable
-    if (!res.destroyed && res.writable) {
-      try {
-        res.write(
-          `event: error\ndata: ${JSON.stringify({ error: errorMessage })}\n\n`
-        );
-        res.end();
-      } catch (writeError) {
-        logger.error('Error writing to response stream:', writeError);
-      }
+    try {
+      await sendMessage(user, model, message, sseOutput);
+    } catch (error) {
+      logger.error('Error during streaming chat:', error);
+      // The HonoSSEOutput's onError will be called from within sendMessage,
+      // which will handle closing the stream.
     }
-  }
+  });
 });
 
 /**
  * @swagger
  * /api/v1/chat:
  *   post:
- *     summary: Send message with complete response for authenticated user
+ *     summary: Send message with regular JSON response for authenticated user
  *     tags: [Chat]
  *     security:
  *       - BearerAuth: []
@@ -292,18 +279,20 @@ router.post('/stream', requireAuth, async (req, res: Response) => {
  *               - message
  *     responses:
  *       200:
- *         description: Chat response
+ *         description: The full response from the agent
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 userId:
- *                   type: string
  *                 response:
  *                   type: string
- *                 messageCount:
+ *                 cost:
+ *                   type: number
+ *                 tokens:
  *                   type: integer
+ *                 userId:
+ *                   type: string
  *       400:
  *         description: Bad request - invalid message
  *       401:
@@ -311,47 +300,45 @@ router.post('/stream', requireAuth, async (req, res: Response) => {
  *       500:
  *         description: Server error
  */
-router.post('/', requireAuth, async (req, res: Response) => {
-  const authReq = req as AuthenticatedRequest;
-  const userId = authReq.user.id;
-  const { message } = authReq.body;
+app.post('/', requireAuth, async c => {
+  const user = c.get('user');
+  const { message } = await c.req.json();
 
   if (!message || typeof message !== 'string') {
-    res.status(400).json({ error: 'Message is required and must be a string' });
-    return;
+    return c.json({ error: 'Message is required and must be a string' }, 400);
   }
 
   try {
-    // Create collect output strategy to gather full response
+    // Simple output strategy to collect the full response
     const collectOutput = new (class implements OutputStrategy {
       private fullText = '';
 
       onChunk(text: string, accumulated: string): void {
         this.fullText = accumulated;
       }
-
       getFullText(): string {
         return this.fullText;
       }
+      onError(error: string): void {
+        logger.error('Error in collectOutput:', error);
+      }
     })();
 
-    // Use the unified sendMessage function with collect output
-    await sendMessage(authReq.user, model, message, collectOutput);
+    const { newMessage } = await sendMessage(
+      user,
+      model,
+      message,
+      collectOutput
+    );
 
-    res.json({
-      userId,
-      response: (collectOutput as any).getFullText(),
-      messageCount: messageHistory.getHistory(userId).length,
+    return c.json({
+      response: newMessage,
+      userId: user.id,
     });
   } catch (error) {
-    logger.error('Chat error:', error);
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: errorMessage,
-      userId,
-    });
+    logger.error(`Error in /chat endpoint for user ${user.id}:`, error);
+    return c.json({ error: 'Failed to get response from agent' }, 500);
   }
 });
 
-export { router as chatRouter };
+export { app as chatRouter };

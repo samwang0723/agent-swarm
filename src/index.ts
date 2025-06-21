@@ -1,50 +1,119 @@
-import dotenv from 'dotenv';
-import express from 'express';
-import cookieParser from 'cookie-parser';
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { apiRouter } from './routes';
-import { corsMiddleware } from './middleware/cors';
-import { errorHandler, notFoundHandler } from './middleware/error-handler';
 import logger from '@utils/logger';
-import fetch from 'node-fetch';
-
-if (!globalThis.fetch) {
-  // @ts-expect-error: Assigning fetch to globalThis for node-fetch polyfill
-  globalThis.fetch = fetch;
-}
+import { ApiError } from '@utils/api-error';
+import { ErrorCodes } from '@utils/error-code';
 
 // Load environment variables
-dotenv.config();
+// dotenv.config(); // config moved to package.json script
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const app = new Hono();
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Middleware
-app.use(express.json());
-app.use(cookieParser()); // Add cookie parser middleware
-app.use(express.static('public')); // For serving a simple web interface
+// Add cookie parser middleware - Hono has built-in cookie helpers, no middleware needed.
+// For serving a simple web interface
+app.use('/*', serveStatic({ root: './public' }));
+app.use('/favicon.ico', serveStatic({ path: './public/favicon.ico' }));
 
 // CORS middleware
-app.use(corsMiddleware);
+app.use(
+  '/api/*',
+  cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    allowHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+    ],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    credentials: true,
+    maxAge: 86400,
+  })
+);
 
 // Mount API routes
-app.use('/', apiRouter);
+app.route('/api/v1', apiRouter);
 
-// 404 handler - must come before error handler
-app.use(notFoundHandler);
+// 404 handler
+app.notFound(c => {
+  return c.json(
+    {
+      error: 'Route not found',
+      code: ErrorCodes.NOT_FOUND,
+      details: `Route ${c.req.method} ${c.req.path} not found`,
+    },
+    404
+  );
+});
 
-// Error handling middleware - must be last
-app.use(errorHandler);
+// Error handling middleware
+app.onError((err, c) => {
+  logger.error('Error caught by error handler:', {
+    error: err.message,
+    // stack: err.stack,
+    url: c.req.path,
+    method: c.req.method,
+  });
+
+  if (err instanceof ApiError) {
+    return c.json(err.toJSON(), err.statusCode as any);
+  }
+
+  // Handle specific known error types
+  if (err.name === 'ValidationError') {
+    return c.json(
+      {
+        error: 'Validation failed',
+        code: ErrorCodes.VALIDATION_ERROR,
+        details: err.message,
+      },
+      400
+    );
+  }
+
+  // Default fallback for unhandled errors
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  return c.json(
+    {
+      error: 'Internal server error',
+      code: ErrorCodes.INTERNAL_ERROR,
+      ...(isDevelopment && {
+        details: {
+          message: err.message,
+          stack: err.stack,
+        },
+      }),
+    },
+    500
+  );
+});
 
 // Start server
-app.listen(PORT, () => {
-  logger.info(`🚀 Agent Swarm API Server running on http://localhost:${PORT}`);
-  logger.info(`📋 API Documentation: http://localhost:${PORT}/api/v1/docs`);
-  logger.info(`🔐 Authentication: http://localhost:${PORT}/api/v1/auth/google`);
-  logger.info(`📡 Streaming endpoint: POST /api/v1/chat/stream`);
-  logger.info(`💬 Regular chat endpoint: POST /api/v1/chat`);
-  logger.info(`📊 Get history: GET /api/v1/chat/history`);
-  logger.info(`🗑️  Clear history: DELETE /api/v1/chat/history`);
-  logger.info(`🏥 Health check: GET /api/v1/health`);
-});
+serve(
+  {
+    fetch: app.fetch,
+    port: PORT,
+  },
+  () => {
+    logger.info(
+      `🚀 Agent Swarm API Server running on http://localhost:${PORT}`
+    );
+    logger.info(`📋 API Documentation: http://localhost:${PORT}/api/v1/docs`);
+    logger.info(
+      `🔐 Authentication: http://localhost:${PORT}/api/v1/auth/google`
+    );
+    logger.info(`📡 Streaming endpoint: POST /api/v1/chat/stream`);
+    logger.info(`💬 Regular chat endpoint: POST /api/v1/chat`);
+    logger.info(`📊 Get history: GET /api/v1/chat/history`);
+    logger.info(`🗑️  Clear history: DELETE /api/v1/chat/history`);
+    logger.info(`🏥 Health check: GET /api/v1/health`);
+  }
+);
 
 export default app;

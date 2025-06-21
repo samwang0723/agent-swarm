@@ -324,15 +324,10 @@ app.post('/', requireAuth, async c => {
       }
     })();
 
-    const { newMessage } = await sendMessage(
-      user,
-      model,
-      message,
-      collectOutput
-    );
+    await sendMessage(user, model, message, collectOutput);
 
     return c.json({
-      response: newMessage,
+      response: collectOutput.getFullText(),
       userId: user.id,
     });
   } catch (error) {

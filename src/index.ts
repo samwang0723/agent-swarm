@@ -1,7 +1,6 @@
-import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serveStatic } from '@hono/node-server/serve-static';
+import { serveStatic } from 'hono/bun';
 import { apiRouter } from './routes';
 import logger from '@utils/logger';
 import { ApiError } from '@utils/api-error';
@@ -91,26 +90,16 @@ app.onError((err, c) => {
   );
 });
 
-// Start server
-serve(
-  {
-    fetch: app.fetch,
-    port: PORT,
-  },
-  () => {
-    logger.info(
-      `🚀 Agent Swarm API Server running on http://localhost:${PORT}`
-    );
-    logger.info(`📋 API Documentation: http://localhost:${PORT}/api/v1/docs`);
-    logger.info(
-      `🔐 Authentication: http://localhost:${PORT}/api/v1/auth/google`
-    );
-    logger.info(`📡 Streaming endpoint: POST /api/v1/chat/stream`);
-    logger.info(`💬 Regular chat endpoint: POST /api/v1/chat`);
-    logger.info(`📊 Get history: GET /api/v1/chat/history`);
-    logger.info(`🗑️  Clear history: DELETE /api/v1/chat/history`);
-    logger.info(`🏥 Health check: GET /api/v1/health`);
-  }
-);
+logger.info(`🚀 Agent Swarm API Server running on http://localhost:${PORT}`);
+logger.info(`📋 API Documentation: http://localhost:${PORT}/api/v1/docs`);
+logger.info(`🔐 Authentication: http://localhost:${PORT}/api/v1/auth/google`);
+logger.info(`📡 Streaming endpoint: POST /api/v1/chat/stream`);
+logger.info(`💬 Regular chat endpoint: POST /api/v1/chat`);
+logger.info(`📊 Get history: GET /api/v1/chat/history`);
+logger.info(`🗑️  Clear history: DELETE /api/v1/chat/history`);
+logger.info(`🏥 Health check: GET /api/v1/health`);
 
-export default app;
+export default {
+  port: PORT,
+  fetch: app.fetch,
+};

@@ -8,12 +8,12 @@ import {
   removeUserSession,
   Session,
   requireAuth,
-  // AuthenticatedRequest,
 } from '../middleware/auth';
 import { createServerError } from '../utils/api-error';
 import { ErrorCodes } from '../utils/error-code';
-// import { asyncHandler } from '../middleware/error-handler';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import { fetchAndStoreEmails } from '@/services/gmail/task';
+import { UserService } from '@/services/user';
 
 type Env = {
   Variables: {
@@ -257,12 +257,23 @@ app.get('/google/callback', async c => {
       );
     }
 
+    const userService = new UserService();
+    const user = await userService.findOrCreateUser({
+      email: userInfo.email,
+      name: userInfo.name,
+    });
+    await userService.upsertGoogleIntegration(user.id, {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: tokens.expiry_date,
+    });
+
     const sessionToken = generateSessionToken();
     const sessionId = `sid_${randomUUID()}`;
     const session: Session = {
-      id: userInfo.id,
-      email: userInfo.email,
-      name: userInfo.name || '',
+      id: user.id,
+      email: user.email,
+      name: user.name || '',
       picture: userInfo.picture || '',
       sessionId,
       accessToken: tokens.access_token || undefined,
@@ -274,6 +285,9 @@ app.get('/google/callback', async c => {
     // Store session
     await storeUserSession(sessionToken, session);
 
+    // Update last login timestamp
+    await userService.updateLastLogin(user.id);
+
     // Set cookie
     setCookie(c, 'auth_token', sessionToken, {
       httpOnly: true,
@@ -283,6 +297,9 @@ app.get('/google/callback', async c => {
     });
 
     logger.info(`Session stored for user: ${userInfo.email}`);
+
+    // Start background job to fetch and store emails without blocking the response
+    fetchAndStoreEmails(session.accessToken || '', user.id);
 
     // Redirect to a success page or the main app
     return c.redirect(
@@ -313,6 +330,7 @@ app.get('/google/callback', async c => {
  *         description: Not authenticated
  */
 app.post('/logout', requireAuth, async c => {
+  const userSession = c.get('user');
   let token: string | undefined;
 
   const authHeader = c.req.header('Authorization');
@@ -323,7 +341,9 @@ app.post('/logout', requireAuth, async c => {
   }
 
   if (token) {
-    removeUserSession(token);
+    const userService = new UserService();
+    await userService.deleteGoogleIntegration(userSession.id);
+    await removeUserSession(token);
     deleteCookie(c, 'auth_token', { path: '/' });
   }
   return c.json({ success: true, message: 'Logged out successfully' });

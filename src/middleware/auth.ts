@@ -5,6 +5,7 @@ import { google } from 'googleapis';
 import { AgentFactory } from '../agents/factory';
 import { createAuthError } from '../utils/api-error';
 import { ErrorCodes } from '../utils/error-code';
+import { SessionService } from '../services/session';
 
 export interface Session {
   id: string;
@@ -23,31 +24,37 @@ export interface AuthenticatedRequest extends Request {
   user: Session;
 }
 
-// In-memory storage for user sessions
-const userSessions = new Map<string, Session>();
+const sessionService = new SessionService();
+const SESSION_EXPIRATION_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
 /**
  * Store user session
  */
-export const storeUserSession = (token: string, user: Session): void => {
-  userSessions.set(token, {
-    ...user,
-    createdAt: new Date(),
-  });
+export const storeUserSession = async (
+  token: string,
+  user: Session
+): Promise<void> => {
+  await sessionService.createSession(
+    token,
+    { ...user, createdAt: new Date() },
+    SESSION_EXPIRATION_SECONDS
+  );
 };
 
 /**
  * Get user session
  */
-export const getUserSession = (token: string): Session | undefined => {
-  return userSessions.get(token);
+export const getUserSession = async (
+  token: string
+): Promise<Session | null> => {
+  return sessionService.getSession(token);
 };
 
 /**
  * Remove user session
  */
-export const removeUserSession = (token: string): boolean => {
-  return userSessions.delete(token);
+export const removeUserSession = async (token: string): Promise<void> => {
+  await sessionService.deleteSession(token);
 };
 
 /**
@@ -69,7 +76,7 @@ export const refreshAccessTokenIfNeeded = async (
 
   if (!userSession.refreshToken) {
     logger.warn('Access token expired, but no refresh token available.');
-    removeUserSession(token);
+    await removeUserSession(token);
     throw createAuthError(
       ErrorCodes.REFRESH_TOKEN_ERROR,
       'Session expired, please log in again.'
@@ -100,7 +107,7 @@ export const refreshAccessTokenIfNeeded = async (
         : undefined;
 
     // The session key (token) remains the same, but the session data is updated.
-    storeUserSession(token, userSession);
+    await sessionService.updateSession(token, userSession);
 
     // Update agent factory with new access token
     if (userSession.accessToken) {
@@ -109,7 +116,7 @@ export const refreshAccessTokenIfNeeded = async (
   } catch (error) {
     logger.error('Failed to refresh access token:', error);
     // If refresh fails, the user needs to re-authenticate.
-    removeUserSession(token);
+    await removeUserSession(token);
     throw createAuthError(
       ErrorCodes.REFRESH_TOKEN_ERROR,
       'Session expired, please log in again.'
@@ -134,7 +141,7 @@ export const requireAuth = async (c: Context, next: Next): Promise<void> => {
     throw createAuthError(ErrorCodes.AUTH_REQUIRED);
   }
 
-  const userSession = getUserSession(token);
+  const userSession = await getUserSession(token);
 
   if (!userSession) {
     throw createAuthError(ErrorCodes.INVALID_TOKEN);
@@ -161,7 +168,7 @@ export const optionalAuth = async (c: Context, next: Next): Promise<void> => {
     }
 
     if (token) {
-      const userSession = getUserSession(token);
+      const userSession = await getUserSession(token);
       if (userSession) {
         c.set('user', userSession);
       }

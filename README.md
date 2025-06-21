@@ -29,6 +29,28 @@ A powerful AI Agent Swarm application built with TypeScript and Hono, featuring 
 
 ## 🏗️ Architecture Overview
 
+             +-----------------------------+
+             |  User Question (NL Prompt)  |
+             +-----------------------------+
+                          |
+                          v
+         +--------------------------------------+
+         | LLM-Orchestrator (your backend API)  |
+         | - Parses intent                      |
+         | - Embedding search (if needed)       |
+         | - SQL query / summarization          |
+         +------------------+-------------------+
+                            |
+                +-----------+------------+
+                |    Embedding Layer     |
+                |  (Postgres + pgvector) |
+                +------------------------+
+                            |
+                +-----------+------------+
+                |      Data Store        |
+                | (emails, events, etc.) |
+                +------------------------+
+
 The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent architecture:
 
 ### AgentSwarm Integration
@@ -875,6 +897,32 @@ Get connection status of all MCP servers.
 #### `toolRegistry.getToolNames()`
 
 Get list of all available tool names.
+
+### Database Schema
+
+```mermaid
+erDiagram
+  users ||--o{ integrations : has
+  users ||--o{ emails : owns
+  users ||--o{ messages : owns
+  users ||--o{ calendar_events : owns
+  users ||--o{ embeddings : owns
+  users ||--o{ summaries : owns
+
+  emails ||--o| embeddings : feeds
+  messages ||--o| embeddings : feeds
+  calendar_events ||--o| embeddings : feeds
+
+  embeddings {
+    UUID id
+    UUID user_id
+    TEXT source_type
+    UUID source_id
+    TEXT content
+    VECTOR[] embedding
+    TIMESTAMP created_at
+  }
+```
 
 ## 🔍 Troubleshooting
 

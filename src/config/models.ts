@@ -2,10 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import logger from '@utils/logger';
-import dotenv from 'dotenv';
 import { LanguageModelV1 } from 'ai';
-
-dotenv.config();
 
 export type ModelProvider = 'anthropic' | 'openai' | 'google';
 

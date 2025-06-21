@@ -313,9 +313,17 @@ app.get('/google/callback', async c => {
  *         description: Not authenticated
  */
 app.post('/logout', requireAuth, async c => {
-  const token = getCookie(c, 'auth_token');
+  let token: string | undefined;
+
+  const authHeader = c.req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else {
+    token = getCookie(c, 'auth_token');
+  }
+
   if (token) {
-    await removeUserSession(token);
+    removeUserSession(token);
     deleteCookie(c, 'auth_token', { path: '/' });
   }
   return c.json({ success: true, message: 'Logged out successfully' });
@@ -343,7 +351,16 @@ app.get('/me', requireAuth, async c => {
   // The user session is attached by the requireAuth middleware
   // The 'user' property is available on the context 'c'
   const userSession = c.get('user');
-  return c.json(userSession);
+
+  // Return only non-sensitive user information
+  return c.json({
+    id: userSession.id,
+    email: userSession.email,
+    name: userSession.name,
+    picture: userSession.picture,
+    sessionId: userSession.sessionId,
+    createdAt: userSession.createdAt,
+  });
 });
 
 export { app as authRouter };
@@ -355,15 +372,15 @@ export { app as authRouter };
  *     UserSession:
  *       type: object
  *       properties:
- *         sessionId:
- *           type: string
- *         userId:
+ *         id:
  *           type: string
  *         email:
  *           type: string
  *         name:
  *           type: string
  *         picture:
+ *           type: string
+ *         sessionId:
  *           type: string
  *         createdAt:
  *           type: string

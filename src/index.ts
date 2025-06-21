@@ -7,9 +7,6 @@ import logger from '@utils/logger';
 import { ApiError } from '@utils/api-error';
 import { ErrorCodes } from '@utils/error-code';
 
-// Load environment variables
-// dotenv.config(); // config moved to package.json script
-
 const app = new Hono();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 

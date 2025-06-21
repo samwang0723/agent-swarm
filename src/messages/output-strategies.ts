@@ -1,60 +1,66 @@
-import { Response } from 'express';
-import { SSEOutputStrategy, OutputStrategy } from '@messages/types';
+import { SSEStreamingApi } from 'hono/streaming';
+import { OutputStrategy } from '@messages/types';
+import logger from '@utils/logger';
 
-export class SSEOutput implements SSEOutputStrategy {
-  response: Response;
-  sessionId: string;
-  private isEnded: boolean = false;
+export class HonoSSEOutput implements OutputStrategy {
+  private stream: SSEStreamingApi;
+  private sessionId: string;
+  private isClosed = false;
 
-  constructor(response: Response, sessionId: string) {
-    this.response = response;
+  constructor(stream: SSEStreamingApi, sessionId: string) {
+    this.stream = stream;
     this.sessionId = sessionId;
   }
 
-  private safeWrite(data: string): void {
-    if (!this.isEnded && !this.response.destroyed && this.response.writable) {
-      try {
-        this.response.write(data);
-      } catch (error) {
-        console.error('Error writing to SSE stream:', error);
-        this.isEnded = true;
-      }
+  private safeWrite(event: string, data: object): void {
+    if (this.isClosed) return;
+
+    try {
+      this.stream.writeSSE({ event, data: JSON.stringify(data) });
+    } catch (error) {
+      logger.error('Error writing to SSE stream:', {
+        error,
+        sessionId: this.sessionId,
+      });
+      this.isClosed = true;
     }
   }
 
   onStart(data: { sessionId: string; streaming: boolean }): void {
-    this.safeWrite(`event: start\ndata: ${JSON.stringify(data)}\n\n`);
+    this.safeWrite('start', data);
   }
 
   onChunk(text: string, accumulated: string): void {
-    this.safeWrite(
-      `event: chunk\ndata: ${JSON.stringify({ text, accumulated })}\n\n`
-    );
+    this.safeWrite('chunk', { text, accumulated });
   }
 
   onFinish(data: { complete: boolean; sessionId: string }): void {
-    if (!this.isEnded) {
-      this.safeWrite(`event: finish\ndata: ${JSON.stringify(data)}\n\n`);
-      this.isEnded = true;
-      try {
-        this.response.end();
-      } catch (error) {
-        console.error('Error ending SSE stream:', error);
-      }
+    if (this.isClosed) return;
+
+    this.safeWrite('finish', data);
+    this.isClosed = true;
+    try {
+      this.stream.close();
+    } catch (error) {
+      logger.error('Error closing SSE stream:', {
+        error,
+        sessionId: this.sessionId,
+      });
     }
   }
 
   onError(error: string): void {
-    if (!this.isEnded) {
-      this.safeWrite(
-        `event: error\ndata: ${JSON.stringify({ error: error })}\n\n`
-      );
-      this.isEnded = true;
-      try {
-        this.response.end();
-      } catch (error) {
-        console.error('Error ending SSE stream after error:', error);
-      }
+    if (this.isClosed) return;
+
+    this.safeWrite('error', { error });
+    this.isClosed = true;
+    try {
+      this.stream.close();
+    } catch (error) {
+      logger.error('Error closing SSE stream after error:', {
+        error,
+        sessionId: this.sessionId,
+      });
     }
   }
 }

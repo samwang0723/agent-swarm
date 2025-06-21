@@ -1,7 +1,7 @@
-import express, { Request, Response, Router } from 'express';
+import { Hono } from 'hono';
 import { toolRegistry } from '@tools/index';
 
-const router: Router = express.Router();
+const app = new Hono();
 
 /**
  * @swagger
@@ -36,7 +36,7 @@ const router: Router = express.Router();
  *                       items:
  *                         type: string
  */
-router.get('/', async (req: Request, res: Response) => {
+app.get('/', async c => {
   const health = {
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -47,7 +47,7 @@ router.get('/', async (req: Request, res: Response) => {
     },
   };
 
-  res.json(health);
+  return c.json(health);
 });
 
-export { router as healthRouter };
+export { app as healthRouter };

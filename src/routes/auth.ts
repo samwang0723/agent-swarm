@@ -1,4 +1,4 @@
-import express, { Request, Response, Router } from 'express';
+import { Hono } from 'hono';
 import { google } from 'googleapis';
 import crypto from 'crypto';
 import { randomUUID } from 'crypto';
@@ -8,13 +8,20 @@ import {
   removeUserSession,
   Session,
   requireAuth,
-  AuthenticatedRequest,
+  // AuthenticatedRequest,
 } from '../middleware/auth';
-import { ApiError, createServerError } from '../utils/api-error';
+import { createServerError } from '../utils/api-error';
 import { ErrorCodes } from '../utils/error-code';
-import { asyncHandler } from '../middleware/error-handler';
+// import { asyncHandler } from '../middleware/error-handler';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 
-const router: Router = express.Router();
+type Env = {
+  Variables: {
+    user: Session;
+  };
+};
+
+const app = new Hono<Env>();
 
 // Gmail OAuth Configuration
 const OAuth2 = google.auth.OAuth2;
@@ -47,37 +54,34 @@ const generateSessionToken = (): string => {
  *       500:
  *         description: Server error
  */
-router.get(
-  '/google',
-  asyncHandler(async (req: Request, res: Response) => {
-    const scopes = [
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
-    ];
+app.get('/google', async c => {
+  const scopes = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+  ];
 
-    try {
-      const authUrl = oauth2Client.generateAuthUrl({
-        access_type: 'offline',
-        prompt: 'consent',
-        scope: scopes,
-        state: 'gmail-auth', // CSRF protection
-        include_granted_scopes: true,
-        response_type: 'code',
-      });
+  try {
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: scopes,
+      state: 'gmail-auth', // CSRF protection
+      include_granted_scopes: true,
+      response_type: 'code',
+    });
 
-      logger.info(`Redirecting to Google OAuth: ${authUrl}`);
-      res.redirect(authUrl);
-    } catch (error) {
-      logger.error('Error generating auth URL:', error);
-      throw createServerError(
-        ErrorCodes.AUTH_INIT_ERROR,
-        undefined,
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  })
-);
+    logger.info(`Redirecting to Google OAuth: ${authUrl}`);
+    return c.redirect(authUrl);
+  } catch (error) {
+    logger.error('Error generating auth URL:', error);
+    throw createServerError(
+      ErrorCodes.AUTH_INIT_ERROR,
+      undefined,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+});
 
 /**
  * @swagger
@@ -129,280 +133,261 @@ router.get(
  *       500:
  *         description: Server error
  */
-router.get(
-  '/google/callback',
-  asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { code, state } = req.query;
+app.get('/google/callback', async c => {
+  const { code, state } = c.req.query();
 
-    logger.info(`Callback received with: code: ${!!code} state: ${state}`);
+  logger.info(`Callback received with: code: ${!!code} state: ${state}`);
 
-    if (state !== 'gmail-auth') {
-      logger.error('Invalid state parameter');
-      res.redirect('/?auth=error&reason=invalid_state');
-      return;
-    }
+  if (state !== 'gmail-auth') {
+    logger.error('Invalid state parameter');
+    return c.redirect('/?auth=error&reason=invalid_state');
+  }
 
-    if (!code) {
-      logger.error('Authorization code is missing');
-      res.redirect('/?auth=error&reason=missing_code');
-      return;
-    }
+  if (!code) {
+    logger.error('Authorization code is missing');
+    return c.redirect('/?auth=error&reason=missing_code');
+  }
 
-    try {
-      // Create a new OAuth2 client instance for this request
-      const callbackOAuth2Client = new OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        redirectUri
+  try {
+    // Create a new OAuth2 client instance for this request
+    const callbackOAuth2Client = new OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+
+    // Exchange code for tokens using the new client instance
+    const { tokens } = await callbackOAuth2Client.getToken(code as string);
+    logger.info('Tokens received successfully');
+    logger.info('Token details:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      tokenType: tokens.token_type,
+      expiryDate: tokens.expiry_date,
+    });
+
+    if (!tokens.refresh_token) {
+      logger.warn(
+        'Refresh token not received. User may need to re-authenticate for offline access.'
       );
+    }
 
-      // Exchange code for tokens using the new client instance
-      const { tokens } = await callbackOAuth2Client.getToken(code as string);
-      logger.info('Tokens received successfully');
-      logger.info('Token details:', {
-        hasAccessToken: !!tokens.access_token,
-        hasRefreshToken: !!tokens.refresh_token,
-        tokenType: tokens.token_type,
-        expiryDate: tokens.expiry_date,
+    // Set credentials on the new client instance
+    callbackOAuth2Client.setCredentials(tokens);
+
+    // Try to get user info using direct fetch with access token as fallback
+    let userInfo: {
+      id?: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+    };
+    try {
+      // First try with the Google API client
+      const oauth2 = google.oauth2({
+        version: 'v2',
+        auth: callbackOAuth2Client,
+      });
+      const response = await oauth2.userinfo.get();
+      userInfo = {
+        id: response.data.id || undefined,
+        email: response.data.email || undefined,
+        name: response.data.name || undefined,
+        picture: response.data.picture || undefined,
+      };
+      logger.info('User info retrieved via Google API client');
+    } catch (apiError) {
+      logger.warn('Google API client failed, trying direct fetch:', {
+        error: apiError instanceof Error ? apiError.message : String(apiError),
+        stack: apiError instanceof Error ? apiError.stack : undefined,
       });
 
-      if (!tokens.refresh_token) {
-        logger.warn(
-          'Refresh token not received. User may need to re-authenticate for offline access.'
+      // Fallback to direct fetch with access token
+      if (tokens.access_token) {
+        logger.info(
+          `Attempting direct fetch with access token: ${tokens.access_token.substring(
+            0,
+            20
+          )}...`
         );
-      }
 
-      // Set credentials on the new client instance
-      callbackOAuth2Client.setCredentials(tokens);
-
-      // Try to get user info using direct fetch with access token as fallback
-      let userInfo: {
-        id?: string;
-        email?: string;
-        name?: string;
-        picture?: string;
-      };
-      try {
-        // First try with the Google API client
-        const oauth2 = google.oauth2({
-          version: 'v2',
-          auth: callbackOAuth2Client,
-        });
-        const response = await oauth2.userinfo.get();
-        userInfo = {
-          id: response.data.id || undefined,
-          email: response.data.email || undefined,
-          name: response.data.name || undefined,
-          picture: response.data.picture || undefined,
-        };
-        logger.info('User info retrieved via Google API client');
-      } catch (apiError) {
-        logger.warn('Google API client failed, trying direct fetch:', {
-          error:
-            apiError instanceof Error ? apiError.message : String(apiError),
-          stack: apiError instanceof Error ? apiError.stack : undefined,
-        });
-
-        // Fallback to direct fetch with access token
-        if (tokens.access_token) {
-          logger.info(
-            `Attempting direct fetch with access token: ${tokens.access_token.substring(0, 20)}...`
-          );
-
-          // Try the userinfo endpoint with Authorization header
-          const userInfoResponse = await fetch(
-            'https://www.googleapis.com/oauth2/v2/userinfo',
-            {
-              headers: {
-                Authorization: `Bearer ${tokens.access_token}`,
-                Accept: 'application/json',
-              },
-            }
-          );
-
-          logger.info(
-            `Direct fetch response status: ${userInfoResponse.status}`
-          );
-
-          if (!userInfoResponse.ok) {
-            const errorText = await userInfoResponse.text();
-            logger.error(`Direct fetch error response: ${errorText}`);
-            throw createServerError(
-              ErrorCodes.GOOGLE_USERINFO_ERROR,
-              `Direct fetch failed: ${userInfoResponse.status} ${userInfoResponse.statusText}`,
-              { status: userInfoResponse.status, response: errorText }
-            );
+        // Try the userinfo endpoint with Authorization header
+        const userInfoResponse = await fetch(
+          'https://www.googleapis.com/oauth2/v2/userinfo',
+          {
+            headers: {
+              Authorization: `Bearer ${tokens.access_token}`,
+              Accept: 'application/json',
+            },
           }
+        );
 
-          userInfo = (await userInfoResponse.json()) as {
-            id?: string;
-            email?: string;
-            name?: string;
-            picture?: string;
-          };
-          logger.info('User info retrieved via direct fetch');
-        } else {
+        logger.info(`Direct fetch response status: ${userInfoResponse.status}`);
+
+        if (!userInfoResponse.ok) {
+          const errorText = await userInfoResponse.text();
+          logger.error(`Direct fetch error response: ${errorText}`);
           throw createServerError(
-            ErrorCodes.GOOGLE_TOKEN_ERROR,
-            'No access token available for direct fetch'
+            ErrorCodes.GOOGLE_USERINFO_ERROR,
+            `Direct fetch failed: ${userInfoResponse.status} ${userInfoResponse.statusText}`,
+            { status: userInfoResponse.status, response: errorText }
           );
         }
+
+        userInfo = (await userInfoResponse.json()) as {
+          id?: string;
+          email?: string;
+          name?: string;
+          picture?: string;
+        };
+        logger.info('User info retrieved via direct fetch');
+      } else {
+        throw createServerError(
+          ErrorCodes.GOOGLE_TOKEN_ERROR,
+          'No access token available for direct fetch'
+        );
       }
-
-      // Create a chat session automatically using user ID
-      const chatSessionId = randomUUID();
-
-      const user = {
-        id: userInfo.id || randomUUID(),
-        email: userInfo.email || '',
-        name: userInfo.name || undefined,
-        picture: userInfo.picture || undefined,
-        sessionId: chatSessionId, // Include chat session ID
-        accessToken: tokens.access_token || undefined, // Store Google access token
-        refreshToken: tokens.refresh_token || undefined,
-        tokenExpiryDate: tokens.expiry_date || undefined,
-      };
-
-      // Generate session token and store user with session info
-      const sessionToken = generateSessionToken();
-      storeUserSession(sessionToken, user as Session);
-
-      logger.info(
-        `User authenticated with auto-created session: ${user.email} (sessionId: ${chatSessionId})`
-      );
-
-      // Set HTTP-only cookie for session
-      res.cookie('session_token', sessionToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      });
-
-      // Redirect to frontend with success
-      res.redirect('/?auth=success');
-    } catch (error) {
-      logger.error('OAuth callback error:', error);
-
-      // If it's already an ApiError, let it bubble up to the error handler
-      if (error instanceof ApiError) {
-        throw error;
-      }
-
-      // For other errors, redirect to frontend with error
-      res.redirect('/?auth=error&reason=server_error');
     }
-  })
-);
 
-/**
- * @swagger
- * /api/v1/auth/me:
- *   get:
- *     summary: Get current user information
- *     tags: [Authentication]
- *     security:
- *       - BearerAuth: []
- *       - CookieAuth: []
- *     responses:
- *       200:
- *         description: User information
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: string
- *                 email:
- *                   type: string
- *                 name:
- *                   type: string
- *                 picture:
- *                   type: string
- *       401:
- *         description: Unauthorized
- */
-router.get(
-  '/me',
-  requireAuth,
-  asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const userSession = (req as AuthenticatedRequest).user;
+    if (!userInfo || !userInfo.email || !userInfo.id) {
+      throw createServerError(
+        ErrorCodes.GOOGLE_USERINFO_ERROR,
+        'Failed to retrieve user info',
+        userInfo
+      );
+    }
 
-    res.json({
-      id: userSession.id,
-      email: userSession.email,
-      name: userSession.name,
-      picture: userSession.picture,
+    const sessionToken = generateSessionToken();
+    const sessionId = `sid_${randomUUID()}`;
+    const session: Session = {
+      id: userInfo.id,
+      email: userInfo.email,
+      name: userInfo.name || '',
+      picture: userInfo.picture || '',
+      sessionId,
+      accessToken: tokens.access_token || undefined,
+      refreshToken: tokens.refresh_token || undefined,
+      tokenExpiryDate: tokens.expiry_date || undefined,
+      createdAt: new Date(),
+    };
+
+    // Store session
+    await storeUserSession(sessionToken, session);
+
+    // Set cookie
+    setCookie(c, 'auth_token', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: '/',
     });
-  })
-);
+
+    logger.info(`Session stored for user: ${userInfo.email}`);
+
+    // Redirect to a success page or the main app
+    return c.redirect(
+      `/?auth=success&token_type=bearer&session_id=${sessionId}`
+    );
+  } catch (error) {
+    logger.error('Error in Google OAuth callback:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    // Redirect to an error page
+    return c.redirect('/?auth=error&reason=callback_failed');
+  }
+});
 
 /**
  * @swagger
  * /api/v1/auth/logout:
  *   post:
- *     summary: Logout user
+ *     summary: Log out the user
  *     tags: [Authentication]
  *     security:
- *       - BearerAuth: []
- *       - CookieAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Logout successful
+ *         description: Successfully logged out
+ *       401:
+ *         description: Not authenticated
+ */
+app.post('/logout', requireAuth, async c => {
+  let token: string | undefined;
+
+  const authHeader = c.req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else {
+    token = getCookie(c, 'auth_token');
+  }
+
+  if (token) {
+    removeUserSession(token);
+    deleteCookie(c, 'auth_token', { path: '/' });
+  }
+  return c.json({ success: true, message: 'Logged out successfully' });
+});
+
+/**
+ * @swagger
+ * /api/v1/auth/me:
+ *   get:
+ *     summary: Check authentication status
+ *     tags: [Authentication]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Authenticated
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
+ *               $ref: '#/components/schemas/UserSession'
  *       401:
- *         description: Unauthorized
+ *         description: Not authenticated
  */
-router.post(
-  '/logout',
-  asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    let token: string | undefined;
+app.get('/me', requireAuth, async c => {
+  // The user session is attached by the requireAuth middleware
+  // The 'user' property is available on the context 'c'
+  const userSession = c.get('user');
 
-    // Try to get token from Authorization header first
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    } else {
-      // Fall back to cookie
-      token = req.cookies?.session_token;
-    }
+  // Return only non-sensitive user information
+  return c.json({
+    id: userSession.id,
+    email: userSession.email,
+    name: userSession.name,
+    picture: userSession.picture,
+    sessionId: userSession.sessionId,
+    createdAt: userSession.createdAt,
+  });
+});
 
-    if (token) {
-      try {
-        // Remove session from memory
-        removeUserSession(token);
-        logger.info('User session removed');
-      } catch (error) {
-        logger.error('Error removing session:', error);
-        throw createServerError(
-          ErrorCodes.LOGOUT_ERROR,
-          'Failed to remove user session',
-          error instanceof Error ? error.message : String(error)
-        );
-      }
-    }
+export { app as authRouter };
 
-    // Clear the session cookie
-    res.clearCookie('session_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-    });
-
-    res.json({
-      success: true,
-      message: 'Logged out successfully',
-    });
-  })
-);
-
-export { router as authRouter };
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     UserSession:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *         email:
+ *           type: string
+ *         name:
+ *           type: string
+ *         picture:
+ *           type: string
+ *         sessionId:
+ *           type: string
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
+ */

@@ -1,7 +1,4 @@
 import { McpServerConfig } from '@tools/mcp-client';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 export const mcpServers: McpServerConfig[] = [
   {

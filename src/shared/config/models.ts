@@ -90,6 +90,7 @@ export const createModelByKey = (
         const anthropic = createAnthropic({
           apiKey: config.apiKey,
         });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const model = anthropic(config.modelName as any);
         logger.info(
           `✅ Anthropic model ${config.modelName} initialized successfully for key ${modelKey}`
@@ -101,6 +102,7 @@ export const createModelByKey = (
           apiKey: config.apiKey,
           compatibility: 'strict',
         });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const model = openai(config.modelName as any);
         logger.info(
           `✅ OpenAI model ${config.modelName} initialized successfully for key ${modelKey}`
@@ -111,6 +113,7 @@ export const createModelByKey = (
         const google = createGoogleGenerativeAI({
           apiKey: config.apiKey,
         });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const model = google(`models/${config.modelName}` as any);
         logger.info(
           `✅ Google model models/${config.modelName} initialized successfully for key ${modelKey}`

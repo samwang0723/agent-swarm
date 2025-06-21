@@ -26,12 +26,15 @@ export class GmailService {
   }
 
   public async getEmails(): Promise<GmailListResponse> {
-    const response = await this.client?.callTool('gmail_list_emails', {
+    if (!this.client) {
+      throw new Error('Gmail service not initialized.');
+    }
+    const response = await this.client.callTool('gmail_list_emails', {
       maxResults: 10,
       query:
         'in:inbox is:unread newer_than:3d -category:promotions -category:social -category:forums',
     });
-    return response;
+    return response as GmailListResponse;
   }
 
   public async batchInsertEmails(
@@ -67,9 +70,6 @@ export class GmailService {
 
     try {
       await emailRepo.insertEmails(formattedEmails);
-      logger.info(
-        `Successfully processed ${formattedEmails.length} emails for potential insertion.`
-      );
     } catch (error) {
       logger.error('Error inserting emails into database', {
         error,

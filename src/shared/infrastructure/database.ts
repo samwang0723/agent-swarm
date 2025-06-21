@@ -13,6 +13,8 @@ pool.on('error', (err: Error, client: PoolClient) => {
 
 export const query = async <T extends QueryResultRow>(
   text: string,
+  // The 'pg' library uses `any[]` for parameters, so we align with that here.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: any[] = []
 ): Promise<QueryResult<T>> => {
   const start = Date.now();

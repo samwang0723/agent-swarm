@@ -2,10 +2,11 @@ import { Tool } from 'ai';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { AgentFunctionTool } from 'agentswarm';
+import { z } from 'zod';
 
 import logger from '@/shared/utils/logger';
 import { toolRegistry } from '@/features/mcp/mcp.repository';
-import { StoreInfo, UBER_EATS_DOMAIN } from './agent.dto';
+import { ChatContext, StoreInfo, UBER_EATS_DOMAIN } from './agent.dto';
 
 /**
  * Converts serverTools (Tool objects from 'ai' library) to AgentFunctionTool format
@@ -23,22 +24,22 @@ export function convertToAgentTools(
     agentTools[toolName] = {
       type: 'function' as const,
       description: tool.description,
-      parameters: tool.parameters as any, // Cast to Parameters type
-      execute: async (args: any, options: any) => {
+      parameters: tool.parameters as z.ZodObject<z.ZodRawShape>,
+      execute: async (
+        args: Record<string, unknown> & Partial<ChatContext>,
+        options: { abortSignal?: AbortSignal }
+      ) => {
         try {
           // Inject access token from context if available
-          if (serverName && options?.context?.accessToken) {
-            toolRegistry.setAccessTokenForServer(
-              serverName,
-              options.context.accessToken
-            );
+          if (serverName && args?.accessToken) {
+            toolRegistry.setAccessTokenForServer(serverName, args.accessToken);
           }
 
           // The original tool.execute expects both args and ToolExecutionOptions
           if (tool.execute) {
             // Create minimal ToolExecutionOptions object
             const toolOptions = {
-              abortSignal: undefined,
+              abortSignal: options?.abortSignal,
               toolCallId: `${toolName}-${Date.now()}`, // Generate unique ID
               messages: [], // Required by ToolExecutionOptions
             };
@@ -137,7 +138,7 @@ export function parseUberEatsStores(rawText: string): string {
 function loadSystemPrompt(domain: string): string {
   try {
     // Use process.cwd() to get the project root, then navigate to config
-    const promptPath = join(process.cwd(), `src/config/prompts/${domain}.txt`);
+    const promptPath = join(process.cwd(), `src/shared/prompts/${domain}.txt`);
     return readFileSync(promptPath, 'utf-8').trim();
   } catch (error) {
     logger.error('Failed to load system prompt from file:', error);

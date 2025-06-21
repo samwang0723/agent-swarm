@@ -4,11 +4,13 @@ import { GmailService } from '@/features/emails/email.service';
 // Start background job to fetch and store emails without blocking the response
 export const fetchAndStoreEmails = async (token: string, userId: string) => {
   try {
+    logger.info('Fetching and storing emails in the background...');
     const gmailService = new GmailService();
     await gmailService.initialize(token);
     const emailResponse = await gmailService.getEmails();
     const emails = emailResponse.messages;
 
+    logger.info(`Fetched ${emails.length} emails`);
     if (emails && emails.length > 0) {
       await gmailService.batchInsertEmails(userId, emails);
       logger.info(

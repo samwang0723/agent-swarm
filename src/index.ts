@@ -5,6 +5,7 @@ import { apiRouter } from '@/api/routes';
 import logger from '@/shared/utils/logger';
 import { ApiError } from '@/shared/utils/api-error';
 import { ErrorCodes } from '@/shared/utils/error-code';
+import { ContentfulStatusCode } from 'hono/utils/http-status';
 
 const app = new Hono();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -58,7 +59,7 @@ app.onError((err, c) => {
   });
 
   if (err instanceof ApiError) {
-    return c.json(err.toJSON(), err.statusCode as any);
+    return c.json(err.toJSON(), err.statusCode as ContentfulStatusCode);
   }
 
   // Handle specific known error types
@@ -102,4 +103,5 @@ logger.info(`🏥 Health check: GET /api/v1/health`);
 export default {
   port: PORT,
   fetch: app.fetch,
+  idleTimeout: 60,
 };

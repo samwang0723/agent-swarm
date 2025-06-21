@@ -1,4 +1,4 @@
-import { LanguageModelV1 } from 'ai';
+import { LanguageModelV1, LanguageModelUsage, ToolCall, ToolResult } from 'ai';
 import { ChatContext } from './agent.dto';
 import { createBusinessLogicAgent } from './agent.service';
 import logger from '@/shared/utils/logger';
@@ -6,6 +6,13 @@ import { calculateCost } from '@/shared/utils/costs';
 import { getCurrentModelInfo } from '@/shared/config/models';
 import { Session } from '@/shared/middleware/auth';
 import { ExtendedHive, ExtendedSwarm } from './agent.dto';
+
+interface LoggableEvent {
+  usage: LanguageModelUsage;
+  stepType: 'initial' | 'continue' | 'tool-result';
+  toolCalls?: ToolCall<string, unknown>[];
+  toolResults?: ToolResult<string, unknown, unknown>[];
+}
 
 // Cache for swarms to persist across messages
 export const swarmCache = new Map<string, ExtendedSwarm<ChatContext>>();
@@ -27,7 +34,7 @@ function createHiveSwarm(
 
 export function logTokenUsage(
   sessionId: string,
-  { promptTokens, completionTokens, totalTokens }: any
+  { promptTokens, completionTokens, totalTokens }: LanguageModelUsage
 ) {
   const modelInfo = getCurrentModelInfo();
   const cost = calculateCost(
@@ -53,7 +60,7 @@ export function logTokenUsage(
 }
 
 // Helper function to log tool information
-export function logToolInformation(sessionId: string, event: any) {
+export function logToolInformation(sessionId: string, event: LoggableEvent) {
   // logger.info('Event:', event);
   logTokenUsage(sessionId, event.usage);
   logger.info(
@@ -62,19 +69,20 @@ export function logToolInformation(sessionId: string, event: any) {
     }, Results: ${event.toolResults?.length || 0}`
   );
 
-  if (event.toolCalls?.length > 0) {
+  if (event.toolCalls && event.toolCalls.length > 0) {
     logger.info(
       'Tool calls:',
       event.toolCalls.map(
-        (tc: any) => `${tc.toolName}(${JSON.stringify(tc.args)})`
+        (tc: ToolCall<string, unknown>) =>
+          `${tc.toolName}(${JSON.stringify(tc.args)})`
       )
     );
   }
 
-  if (event.toolResults?.length > 0) {
+  if (event.toolResults && event.toolResults.length > 0) {
     logger.info(
       'Tool results:',
-      event.toolResults.map((tr: any) => {
+      event.toolResults.map((tr: ToolResult<string, unknown, unknown>) => {
         const jsonStr = JSON.stringify(tr.result);
         const truncated =
           jsonStr.length > 100 ? jsonStr.slice(0, 300) + '...' : jsonStr;

@@ -3,17 +3,17 @@ import { ErrorCodes, ErrorMessages } from '@/shared/utils/error-code';
 /**
  * Custom API Error class for consistent error handling
  */
-export class ApiError extends Error {
+export class ApiError<T = unknown> extends Error {
   public readonly statusCode: number;
   public readonly errorCode: ErrorCodes;
-  public readonly details?: any;
+  public readonly details?: T;
   public readonly isOperational: boolean;
 
   constructor(
     statusCode: number,
     errorCode: ErrorCodes,
     message?: string,
-    details?: any,
+    details?: T,
     isOperational = true
   ) {
     // Use predefined message if not provided
@@ -47,26 +47,26 @@ export class ApiError extends Error {
 /**
  * Factory functions for common error types
  */
-export class AuthError extends ApiError {
-  constructor(errorCode: ErrorCodes, message?: string, details?: any) {
+export class AuthError<T = unknown> extends ApiError<T> {
+  constructor(errorCode: ErrorCodes, message?: string, details?: T) {
     super(401, errorCode, message, details);
   }
 }
 
-export class ValidationError extends ApiError {
-  constructor(message?: string, details?: any) {
+export class ValidationError<T = unknown> extends ApiError<T> {
+  constructor(message?: string, details?: T) {
     super(400, ErrorCodes.VALIDATION_ERROR, message, details);
   }
 }
 
-export class NotFoundError extends ApiError {
-  constructor(message?: string, details?: any) {
+export class NotFoundError<T = unknown> extends ApiError<T> {
+  constructor(message?: string, details?: T) {
     super(404, ErrorCodes.NOT_FOUND, message, details);
   }
 }
 
-export class InternalError extends ApiError {
-  constructor(message?: string, details?: any) {
+export class InternalError<T = unknown> extends ApiError<T> {
+  constructor(message?: string, details?: T) {
     super(500, ErrorCodes.INTERNAL_ERROR, message, details);
   }
 }
@@ -74,21 +74,21 @@ export class InternalError extends ApiError {
 /**
  * Helper function to create authentication errors
  */
-export const createAuthError = (
+export const createAuthError = <T = unknown>(
   errorCode: ErrorCodes,
   message?: string,
-  details?: any
-): AuthError => {
+  details?: T
+): AuthError<T> => {
   return new AuthError(errorCode, message, details);
 };
 
 /**
  * Helper function to create server errors
  */
-export const createServerError = (
+export const createServerError = <T = unknown>(
   errorCode: ErrorCodes,
   message?: string,
-  details?: any
-): ApiError => {
+  details?: T
+): ApiError<T> => {
   return new ApiError(500, errorCode, message, details);
 };

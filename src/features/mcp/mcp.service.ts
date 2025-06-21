@@ -2,7 +2,14 @@ import { Tool } from 'ai';
 import { z } from 'zod';
 import logger from '@/shared/utils/logger';
 import type { ModelProvider } from '@/shared/config/models';
-import { McpServerConfig, McpTool } from './mcp.dto';
+import {
+  McpServerConfig,
+  McpTool,
+  JsonRpcResponse,
+  ToolsListResult,
+  ToolCallResult,
+} from './mcp.dto';
+import { JsonSchema } from '@/shared/types/json-schema';
 
 export class McpClient {
   private sessionId: string | null = null;
@@ -146,7 +153,7 @@ export class McpClient {
       throw new Error(`Tools list error: ${result.error.message}`);
     }
 
-    this.availableTools = result.result?.tools || [];
+    this.availableTools = (result.result as ToolsListResult)?.tools || [];
     logger.info(
       `Loaded ${this.availableTools.length} tools from ${this.config.name}:`,
       this.availableTools.map(t => t.name)
@@ -155,9 +162,9 @@ export class McpClient {
 
   async callTool(
     name: string,
-    parameters: any,
+    parameters: Record<string, unknown>,
     requiresAuth?: boolean
-  ): Promise<any> {
+  ): Promise<unknown> {
     if (!this.sessionId) {
       throw new Error('MCP session not initialized');
     }
@@ -216,8 +223,9 @@ export class McpClient {
       }
 
       // Handle MCP response format
-      if (result.result?.content?.[0]?.type === 'text') {
-        const text = result.result.content[0].text;
+      const toolCallResult = result.result as ToolCallResult;
+      if (toolCallResult?.content?.[0]?.type === 'text') {
+        const text = toolCallResult.content[0].text;
         try {
           return JSON.parse(text);
         } catch {
@@ -226,8 +234,11 @@ export class McpClient {
       }
 
       return result.result;
-    } catch (error: any) {
-      if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        (error.name === 'TimeoutError' || error.name === 'AbortError')
+      ) {
         const timeout = parseInt(process.env.MCP_TIMEOUT || '30000') / 1000;
         const errorMessage = `The tool call to '${name}' timed out after ${timeout} seconds. Please try again later.`;
         logger.error(errorMessage);
@@ -253,104 +264,91 @@ export class McpClient {
     }));
   }
 
-  private convertInputSchemaToZod(schema: any): z.ZodType {
-    if (!schema || schema.type !== 'object') {
-      return z.object({});
+  private convertInputSchemaToZod(schema: JsonSchema): z.ZodType {
+    if (!schema || !schema.type) {
+      // Return a default schema if the input is invalid
+      return z.any();
     }
 
-    // Log the schema conversion strategy being used
-    if (this.modelProvider) {
-      logger.debug(
-        `Using ${this.modelProvider} schema conversion strategy for ${this.config.name}`
-      );
-    }
+    switch (schema.type) {
+      case 'object': {
+        const shape: z.ZodRawShape = {};
+        if (schema.properties) {
+          for (const key of Object.keys(schema.properties)) {
+            const prop = schema.properties[key];
+            let zodType = this.convertInputSchemaToZod(prop).describe(
+              prop.description || ''
+            );
 
-    const zodShape: Record<string, z.ZodType> = {};
-
-    for (const [key, prop] of Object.entries(schema.properties || {})) {
-      const property = prop as any;
-      let zodType: z.ZodType;
-
-      switch (property.type) {
-        case 'string':
-          zodType = z.string();
-          if (property.enum) {
-            zodType = z.enum(property.enum);
+            if (!schema.required?.includes(key)) {
+              zodType = zodType.optional();
+            }
+            shape[key] = zodType;
           }
-          break;
-        case 'number':
-          zodType = z.number();
-          if (property.minimum)
-            zodType = (zodType as z.ZodNumber).min(property.minimum);
-          if (property.maximum)
-            zodType = (zodType as z.ZodNumber).max(property.maximum);
-          break;
-        case 'boolean':
-          zodType = z.boolean();
-          break;
-        case 'array':
-          zodType = z.array(z.string()); // Simplified for now
-          break;
-        default:
-          zodType = z.any();
+        }
+        return z.object(shape);
       }
-
-      if (property.description) {
-        zodType = zodType.describe(property.description);
-      }
-
-      // Conditional logic based on model provider
-      let isRequired: boolean;
-
-      if (this.modelProvider === 'google') {
-        // For Google Gemini: Only mark as required if explicitly listed in the schema's required array
-        isRequired = schema.required?.includes(key) ?? false;
-      } else {
-        // For Claude/OpenAI: Use stricter validation - required unless has default value
-        isRequired =
-          schema.required?.includes(key) ||
-          (property.default === undefined &&
-            !Object.prototype.hasOwnProperty.call(property, 'default'));
-      }
-
-      if (!isRequired) {
-        zodType = zodType.optional();
-      }
-
-      zodShape[key] = zodType;
+      case 'string':
+        return z.string().describe(schema.description || '');
+      case 'number':
+      case 'integer':
+        return z.number().describe(schema.description || '');
+      case 'boolean':
+        return z.boolean().describe(schema.description || '');
+      case 'array':
+        if (schema.items) {
+          return z
+            .array(this.convertInputSchemaToZod(schema.items))
+            .describe(schema.description || '');
+        }
+        return z.array(z.any()).describe(schema.description || ''); // Fallback for arrays with no item schema
+      default:
+        return z.any(); // Fallback for unknown types
     }
-
-    return z.object(zodShape);
   }
 
   getToolNames(): string[] {
     return this.availableTools.map(t => t.name);
   }
 
-  private parseResponse(responseText: string): any {
-    // Check if it's SSE format (starts with "event:")
-    if (responseText.startsWith('event:')) {
-      // Extract JSON from SSE data line
-      const dataLine = responseText
-        .split('\n')
-        .find(line => line.startsWith('data:'));
-      if (dataLine) {
-        const jsonData = dataLine.substring(5).trim(); // Remove "data:" prefix
-        try {
-          return JSON.parse(jsonData);
-        } catch {
-          throw new Error(`Invalid JSON in SSE data: ${jsonData}`);
-        }
-      } else {
-        throw new Error(`No data line found in SSE response: ${responseText}`);
-      }
-    } else {
-      // Direct JSON response
-      try {
+  private parseResponse(responseText: string): JsonRpcResponse {
+    try {
+      // Handle JSON-RPC response
+      if (responseText.trim().startsWith('{')) {
         return JSON.parse(responseText);
-      } catch {
-        throw new Error(`Invalid JSON response: ${responseText}`);
       }
+
+      // Handle Server-Sent Events (SSE) stream
+      const lines = responseText
+        .trim()
+        .split('\n')
+        .filter(line => line.startsWith('data: '));
+
+      if (lines.length > 0) {
+        // In case of multiple data lines, we might need to decide how to handle them.
+        // For now, parsing the last one as it's most likely the final result.
+        const lastLine = lines[lines.length - 1];
+        const jsonData = lastLine.substring(5).trim();
+        return JSON.parse(jsonData);
+      }
+
+      // Fallback for unexpected format
+      throw new Error('Invalid response format');
+    } catch (error) {
+      logger.error('Failed to parse MCP response:', {
+        responseText,
+        error,
+      });
+      // Ensure a consistent error format
+      return {
+        jsonrpc: '2.0',
+        id: null,
+        error: {
+          code: -32700, // Parse error
+          message: 'Failed to parse response',
+          data: responseText,
+        },
+      };
     }
   }
 }

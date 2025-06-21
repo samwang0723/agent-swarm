@@ -23,8 +23,8 @@ export interface ChatContext {
 export interface HandoverTool {
   type: 'handover';
   description: string;
-  parameters: z.ZodObject<any>;
-  execute: (args: any) => Promise<{
+  parameters: z.ZodObject<z.ZodRawShape>;
+  execute: (args: Record<string, unknown>) => Promise<{
     agent: Agent<ChatContext>;
     context: { topic: string };
   }>;

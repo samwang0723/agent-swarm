@@ -225,7 +225,7 @@ export class McpRegistry {
   /**
    * Get MCP client for a specific server (for direct access if needed)
    */
-  getClient(serverName: string): any {
+  getClient(serverName: string): McpClient | undefined {
     return this.clients.get(serverName);
   }
 }
@@ -249,30 +249,33 @@ export class ToolRegistry {
       const totalTools = this.getToolNames().length;
       // logCompleteToolRegistryForLLM(toolsByServer, totalTools);
 
-      logger.info(`Tool registry initialized with ${totalTools} total tools`);
+      logger.info(
+        `Tool Registry initialized with ${totalTools} tools from ${this.mcpRegistry.getServerNames().join(', ')}`
+      );
     } catch (error) {
-      logger.error('Failed to initialize tools:', error);
+      logger.error('Failed to initialize Tool Registry:', error);
+      throw error;
     }
   }
 
   /**
    * Get all registered tools as a flattened object with prefixed names
    */
-  getTools(): Record<string, any> {
+  getTools(): Record<string, Tool> {
     return this.mcpRegistry.getTools();
   }
 
   /**
    * Get tools grouped by MCP server name
    */
-  getToolsByServerMap(): Record<string, Record<string, any>> {
+  getToolsByServerMap(): Record<string, Record<string, Tool>> {
     return this.mcpRegistry.getToolsByServerMap();
   }
 
   /**
    * Get tools from a specific MCP server
    */
-  getServerTools(serverName: string): Record<string, any> {
+  getServerTools(serverName: string): Record<string, Tool> {
     return this.mcpRegistry.getServerTools(serverName);
   }
 
@@ -293,14 +296,14 @@ export class ToolRegistry {
   /**
    * Get a specific tool by name
    */
-  getTool(name: string): any {
+  getTool(name: string): Tool | undefined {
     return this.mcpRegistry.getTool(name);
   }
 
   /**
    * Get a specific tool from a specific server
    */
-  getServerTool(serverName: string, toolName: string): any {
+  getServerTool(serverName: string, toolName: string): Tool | undefined {
     return this.mcpRegistry.getServerTool(serverName, toolName);
   }
 
@@ -352,7 +355,7 @@ export class ToolRegistry {
   /**
    * Get MCP client for a specific server (for direct access if needed)
    */
-  getClient(serverName: string): any {
+  getClient(serverName: string): McpClient | undefined {
     return this.mcpRegistry.getClient(serverName);
   }
 }

@@ -1,4 +1,5 @@
-import { Agent } from 'agentswarm';
+import { Agent, AgentFunctionTool } from 'agentswarm';
+import { Tool } from 'ai';
 import { AgentFactory } from '@/features/agents/agent.factory';
 import { ChatContext } from './agent.dto';
 import { toolRegistry } from '@/features/mcp/mcp.repository';
@@ -25,7 +26,7 @@ const createMultiServiceAgent = (
   serverNames: string[] = [],
   systemPrompt?: string,
   model?: string,
-  extraTools: Record<string, any> = {}
+  extraTools: Record<string, AgentFunctionTool> = {}
 ) => {
   const toolsByServer = toolRegistry.getToolsByServerMap();
   const availableServers = toolRegistry.getServerNames();
@@ -44,7 +45,7 @@ const createMultiServiceAgent = (
   }
 
   // Combine tools from specified servers and convert to AgentFunctionTool format
-  const serverToolsMap: Record<string, Record<string, any>> = {};
+  const serverToolsMap: Record<string, Record<string, Tool>> = {};
   serversToUse.forEach(serverName => {
     const serverTools = toolsByServer[serverName] || {};
     serverToolsMap[serverName] = serverTools;
@@ -71,7 +72,7 @@ const createMultiServiceAgent = (
 // Conditional tool assignment based on available servers
 const createAdaptiveAgent = (systemPrompt?: string, model?: string) => {
   const availableServers = toolRegistry.getServerNames();
-  const serverToolsMap: Record<string, Record<string, any>> = {};
+  const serverToolsMap: Record<string, Record<string, Tool>> = {};
 
   // Only add tools from servers that are actually available
   availableServers.forEach(serverName => {

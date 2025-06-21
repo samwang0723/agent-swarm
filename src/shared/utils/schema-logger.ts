@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import logger from '@/shared/utils/logger';
+import { JsonSchema, JsonSchemaProperty } from '../types/json-schema';
 
 /**
  * Utility to extract readable schema information from Zod objects for LLM consumption
@@ -8,23 +9,19 @@ import logger from '@/shared/utils/logger';
 interface ToolSchemaInfo {
   name: string;
   description: string;
-  parameters: {
-    type: string;
-    properties?: Record<string, any>;
-    required?: string[];
-  };
+  parameters: JsonSchema;
   server?: string;
 }
 
 /**
  * Extract JSON Schema-like structure from Zod schema
  */
-export function extractZodSchema(zodSchema: z.ZodType): any {
+export function extractZodSchema(zodSchema: z.ZodType): JsonSchema {
   try {
     // Handle ZodObject
     if (zodSchema instanceof z.ZodObject) {
       const shape = zodSchema.shape;
-      const properties: Record<string, any> = {};
+      const properties: Record<string, JsonSchemaProperty> = {};
       const required: string[] = [];
 
       for (const [key, value] of Object.entries(shape)) {
@@ -55,7 +52,7 @@ export function extractZodSchema(zodSchema: z.ZodType): any {
 /**
  * Extract information from individual Zod types
  */
-function extractZodTypeInfo(zodType: z.ZodType): any {
+function extractZodTypeInfo(zodType: z.ZodType): JsonSchemaProperty {
   try {
     // Get description if available
     const description = zodType.description;
@@ -189,14 +186,19 @@ export function logCompleteToolRegistryForLLM(
   >,
   totalToolCount: number
 ): void {
+  type ServerToolInfo = {
+    toolCount: number;
+    tools: ToolSchemaInfo[];
+  };
+
   const registrySummary = {
     totalTools: totalToolCount,
     serverCount: Object.keys(toolsByServer).length,
-    toolsByServer: {} as Record<string, any>,
+    toolsByServer: {} as Record<string, ServerToolInfo>,
   };
 
   for (const [serverName, tools] of Object.entries(toolsByServer)) {
-    const serverTools = [];
+    const serverTools: ToolSchemaInfo[] = [];
     for (const [toolName, tool] of Object.entries(tools)) {
       try {
         serverTools.push({
@@ -227,9 +229,9 @@ export function logCompleteToolRegistryForLLM(
       toolCategories: Object.entries(registrySummary.toolsByServer).map(
         ([server, info]) => ({
           server,
-          toolCount: (info as any).toolCount,
-          capabilities: (info as any).tools
-            .map((t: any) => t.description)
+          toolCount: info.toolCount,
+          capabilities: info.tools
+            .map((t: ToolSchemaInfo) => t.description)
             .slice(0, 3), // Sample capabilities
         })
       ),

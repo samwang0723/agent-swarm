@@ -1,47 +1,36 @@
-.PHONY: install dev build test lint lint-fix clean format format-check type-check
+.PHONY: install dev build test lint lint-fix clean
 
 # Default target
 all: install build
 
 # Install dependencies
 install:
-	npm install
+	bun install
 
 # Start development server
 dev:
-	npm run dev
+	bun run dev
 
 # Build for production
 build:
-	npm run build
+	bun run build
 
 # Run tests
 test:
-	npm test
+	bun test
 
 # Run ESLint
 lint:
-	npm run lint
+	bun run lint
 
 # Fix ESLint issues
 lint-fix:
-	npm run lint:fix
-
-# Format code with Prettier
-format:
-	npm run format
-
-# Check code formatting
-format-check:
-	npm run format:check
-
-# Type check TypeScript
-type-check:
-	npm run type-check
+	bun run lint:fix
 
 # Clean build artifacts
 clean:
 	rm -rf dist/
 	rm -rf build/
 	rm -rf coverage/
-	rm -rf node_modules/ 
+	rm -rf node_modules/
+	rm -f bun.lockb 

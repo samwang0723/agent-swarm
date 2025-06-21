@@ -3,8 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-v20+-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue.svg)](https://www.typescriptlang.org/)
+[![Bun](https://img.shields.io/badge/Bun-1.0+-hotpink.svg)](https://bun.sh/)
 
-A powerful AI Agent Swarm application built with TypeScript, featuring intelligent agent routing using the AgentSwarm framework, MCP (Model Context Protocol) tool integration, Google OAuth authentication, and unified output strategies for seamless AI interaction.
+A powerful AI Agent Swarm application built with TypeScript and Hono, featuring intelligent agent routing using the AgentSwarm framework, MCP (Model Context Protocol) tool integration, Google OAuth authentication, and unified output strategies for seamless AI interaction.
 
 ![Screenshot 2025-06-12 at 4 55 46 PM](https://github.com/user-attachments/assets/42b1661a-1e4e-495d-8d85-d9e8fb83f566)
 
@@ -14,7 +15,7 @@ A powerful AI Agent Swarm application built with TypeScript, featuring intellige
 - **👑 Queen Agent Pattern**: Business logic agent that routes to specialized worker agents
 - **🔌 MCP Tool Integration**: Extensible Model Context Protocol support for external services
 - **🔐 Google OAuth Authentication**: Secure authentication with Google account integration and Gmail API access
-- **🌐 RESTful API Server**: User-based API with streaming and non-streaming endpoints
+- **🌐 RESTful API Server**: User-based API with streaming and non-streaming endpoints, built with Hono
 - **📚 Message History**: Persistent conversation history per authenticated user with tool call tracking
 - **🎯 Unified Output Strategies**: Strategy pattern supporting SSE streaming and collected outputs
 - **⚡ Real-time Streaming**: Live AI response streaming with Server-Sent Events
@@ -68,7 +69,7 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
 ## 📋 Prerequisites
 
 - Node.js v20 or higher
-- npm package manager
+- Bun package manager
 - Anthropic API key
 - Google Cloud Console project with OAuth 2.0 credentials
 - MCP servers (optional, for extended functionality)
@@ -85,7 +86,7 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
 2. **Install dependencies**:
 
    ```bash
-   npm install
+   bun install
    # or using make
    make install
    ```
@@ -132,7 +133,7 @@ The Agent Swarm uses the AgentSwarm framework with a sophisticated multi-agent a
 The application serves as both API server and includes a web interface:
 
 ```bash
-npm run dev
+bun run dev
 # or
 make dev
 ```
@@ -493,7 +494,7 @@ src/
 │       └── browser-booking.txt
 ├── utils/
 │   └── logger.ts            # Winston-based logging utility
-└── index.ts                 # Express server with authentication
+└── index.ts                 # Hono server with authentication
 public/
 └── index.html               # Interactive web interface
 ```
@@ -628,7 +629,7 @@ That's it! 🎉 The system automatically:
 Just start the application and test:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 Navigate to `http://localhost:3000` and try queries containing your routing keywords!
@@ -684,7 +685,7 @@ When you add an agent configuration, the system automatically:
 Enable debug logging to see the agent creation process:
 
 ```bash
-LOG_LEVEL=debug npm run dev
+LOG_LEVEL=debug bun run dev
 ```
 
 Check the health endpoint for agent status:
@@ -744,7 +745,7 @@ Always provide temperature in both Celsius and Fahrenheit.
 **4. Test**:
 
 ```bash
-npm run dev
+bun run dev
 # Try: "What's the weather like today?"
 ```
 
@@ -755,7 +756,7 @@ Done! Your weather agent is now fully integrated and ready to use. 🌤️
 ### Build the project
 
 ```bash
-npm run build
+bun run build
 # or
 make build
 ```
@@ -763,7 +764,7 @@ make build
 ### Run in development mode
 
 ```bash
-npm run dev
+bun run dev
 # or
 make dev
 ```
@@ -771,7 +772,7 @@ make dev
 ### Run tests
 
 ```bash
-npm test
+bun test
 # or
 make test
 ```
@@ -779,12 +780,12 @@ make test
 ### Linting
 
 ```bash
-npm run lint
+bun run lint
 # or
 make lint
 
 # Auto-fix linting issues
-npm run lint:fix
+bun run lint:fix
 # or
 make lint-fix
 ```
@@ -915,7 +916,7 @@ Get list of all available tool names.
 Enable debug logging by setting log level:
 
 ```bash
-DEBUG=* npm run dev
+DEBUG=* bun run dev
 ```
 
 Check the `/api/v1/health` endpoint for detailed system status:
@@ -941,7 +942,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [AgentSwarm](https://github.com/K-Mistele/swarm) framework
 - Powered by [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) framework
 - MCP (Model Context Protocol) integration for extensible tool support
-- Express.js for HTTP API server functionality
+- Hono for HTTP API server functionality
 - Google OAuth 2.0 for secure authentication
 
 ---

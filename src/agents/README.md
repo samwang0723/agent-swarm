@@ -20,7 +20,7 @@ The agent system consists of several key components:
 ✅ **Bidirectional Handovers**: Agents can transfer back to receptionist  
 ✅ **Extensible**: Easy to add new agents without code changes  
 ✅ **Type Safety**: Full TypeScript support with proper typing  
-✅ **Comprehensive Logging**: Detailed logging for debugging and monitoring  
+✅ **Comprehensive Logging**: Detailed logging for debugging and monitoring
 
 ## Configuration
 
@@ -28,16 +28,16 @@ The agent system consists of several key components:
 
 ```typescript
 interface AgentConfig {
-  id: string;                    // Unique identifier
-  name: string;                  // Human-readable name
-  description: string;           // Agent description
-  mcpServers: string[];          // MCP servers this agent uses
-  systemPromptFile: string;      // Prompt file name (without .txt)
+  id: string; // Unique identifier
+  name: string; // Human-readable name
+  description: string; // Agent description
+  mcpServers: string[]; // MCP servers this agent uses
+  systemPromptFile: string; // Prompt file name (without .txt)
   additionalInstructions?: string; // Extra instructions appended to prompt
-  enabled?: boolean;             // Whether agent is active (default: true)
-  requiresAuth?: boolean;        // Whether agent needs authentication
-  routingKeywords?: string[];    // Keywords for routing decisions
-  routingDescription?: string;   // Description for handover tool
+  enabled?: boolean; // Whether agent is active (default: true)
+  requiresAuth?: boolean; // Whether agent needs authentication
+  routingKeywords?: string[]; // Keywords for routing decisions
+  routingDescription?: string; // Description for handover tool
 }
 ```
 
@@ -70,37 +70,58 @@ export const agentSystemConfig: AgentSystemConfig = {
 
 ## Usage
 
-### Basic Usage
+The agent system is managed by a `swarm-manager` that handles the lifecycle of agent swarms. Here's how to get and use an agent swarm.
+
+### Getting a Swarm Instance
+
+The `getOrCreateSwarm` function in `swarm-manager.ts` is the primary way to get a swarm. It caches swarms by session ID to maintain state across requests.
 
 ```typescript
-import createBusinessLogicAgent from '@/agents/business-logic';
+import { getOrCreateSwarm } from '@/agents/swarm-manager';
+import { getCurrentModel } from '@/config/models';
+import { Session } from '@/middleware/auth'; // Assuming a session object
 
-// Create the agent system
-const agent = createBusinessLogicAgent(accessToken);
+// Assume you have a session object and a language model
+const session: Session = { id: 'some-session-id', accessToken: '...' };
+const model = getCurrentModel();
 
-// Use with AgentSwarm
-const hive = new Hive<ChatContext>({
-  queen: agent,
-  defaultModel: model,
-  defaultContext: { topic: null },
-});
+// Get or create a swarm for the session
+const swarm = getOrCreateSwarm(session, model);
+
+// Now you can use the swarm to interact with the agents
+const response = await swarm.run('Hello, I need a restaurant recommendation.');
 ```
 
-### Advanced Usage with Factory
+### How it Works
+
+The `getOrCreateSwarm` function uses `createHiveSwarm` internally, which demonstrates the core setup process:
 
 ```typescript
-import { AgentFactory } from '@/agents/factory';
+import { LanguageModelV1 } from 'ai';
+import { ChatContext } from '@/agents';
+import createBusinessLogicAgent from '@/agents/business-logic';
+import { ExtendedHive, ExtendedSwarm } from './extended-swarm';
 
-const factory = AgentFactory.getInstance();
-const agent = factory.createBusinessLogicAgent(accessToken);
+// Helper function to create and configure the swarm
+function createHiveSwarm(
+  model: LanguageModelV1,
+  accessToken?: string
+): ExtendedSwarm<ChatContext> {
+  const hive = new ExtendedHive<ChatContext>({
+    queen: createBusinessLogicAgent(accessToken),
+    defaultModel: model,
+    defaultContext: { topic: null },
+  });
 
-// Get registry for advanced operations
-const registry = factory.getRegistry();
-if (registry) {
-  const stats = registry.getAgentStats();
-  console.log(`${stats.enabled}/${stats.total} agents enabled`);
+  return hive.spawnSwarm();
 }
 ```
+
+This setup involves:
+
+1.  **`createBusinessLogicAgent`**: Creates the receptionist agent, which is the "queen" of the swarm.
+2.  **`ExtendedHive`**: An extension of the base `Hive` from the `agentswarm` library.
+3.  **`hive.spawnSwarm()`**: Spawns an `ExtendedSwarm` instance, which is ready to handle user requests.
 
 ## Adding New Agents
 
@@ -114,7 +135,8 @@ export const mcpServers: McpServerConfig[] = [
   {
     name: 'your-service',
     url: process.env.YOUR_SERVICE_MCP_URL || 'http://localhost:3001/mcp',
-    healthUrl: process.env.YOUR_SERVICE_MCP_HEALTH_URL || 'http://localhost:3001/health',
+    healthUrl:
+      process.env.YOUR_SERVICE_MCP_HEALTH_URL || 'http://localhost:3001/health',
     enabled: process.env.YOUR_SERVICE_MCP_ENABLED !== 'false',
     requiresAuth: false,
   },
@@ -162,6 +184,7 @@ export const agentSystemConfig: AgentSystemConfig = {
 ### Step 4: Test
 
 That's it! The system will automatically:
+
 - Validate the configuration
 - Create the agent with MCP tools
 - Generate handover tools for routing
@@ -209,7 +232,7 @@ const restaurantAgents = findAgentsByKeyword(config, 'restaurant');
 The old `business-logic.ts` file (120 lines) has been replaced with:
 
 - **Configuration**: `config/agents.ts` (declarative setup)
-- **Registry**: `registry.ts` (agent management)  
+- **Registry**: `registry.ts` (agent management)
 - **Factory**: `factory.ts` (creation logic)
 - **Utilities**: `utils.ts` (validation & helpers)
 - **Main**: `business-logic.ts` (3 lines!)
@@ -244,7 +267,9 @@ export default function createBusinessLogicAgent(accessToken?: string) {
 ### After (Clean & Simple)
 
 ```typescript
-export default function createBusinessLogicAgent(accessToken?: string): Agent<ChatContext> {
+export default function createBusinessLogicAgent(
+  accessToken?: string
+): Agent<ChatContext> {
   const factory = AgentFactory.getInstance();
   return factory.createBusinessLogicAgent(accessToken);
 }
@@ -257,7 +282,7 @@ export default function createBusinessLogicAgent(accessToken?: string): Agent<Ch
 ✅ **Reliability**: Comprehensive validation prevents runtime errors  
 📊 **Observability**: Rich logging and statistics for monitoring  
 🏗️ **Scalability**: Clean architecture supports growth  
-🛡️ **Type Safety**: Full TypeScript support prevents bugs  
+🛡️ **Type Safety**: Full TypeScript support prevents bugs
 
 ## Debugging
 
@@ -268,6 +293,7 @@ LOG_LEVEL=debug npm run dev
 ```
 
 This will show detailed information about:
+
 - Agent creation process
 - Handover tool generation
 - Transfer operations
@@ -278,7 +304,7 @@ This will show detailed information about:
 The new system is more efficient than the legacy approach:
 
 - **Lazy Loading**: Agents created only when needed
-- **Validation**: Fail-fast with clear error messages  
+- **Validation**: Fail-fast with clear error messages
 - **Caching**: Factory singleton prevents duplicate work
 - **Memory**: Better resource management with proper cleanup
 
@@ -303,4 +329,4 @@ describe('Agent System', () => {
     expect(validation.valid).toBe(true);
   });
 });
-``` 
+```

@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/bun';
-import { apiRouter } from './routes';
-import logger from '@utils/logger';
-import { ApiError } from '@utils/api-error';
-import { ErrorCodes } from '@utils/error-code';
+import { apiRouter } from '@/api/routes';
+import logger from '@/shared/utils/logger';
+import { ApiError } from '@/shared/utils/api-error';
+import { ErrorCodes } from '@/shared/utils/error-code';
 
 const app = new Hono();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;

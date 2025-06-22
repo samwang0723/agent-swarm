@@ -22,7 +22,6 @@ export async function importGmail(
       logger.info('No new emails to process in the background.');
     }
 
-    await new Promise(r => setTimeout(r, 2000));
     return 'imported';
   } catch (error) {
     logger.error('Error in importGmail activity', {
@@ -31,6 +30,6 @@ export async function importGmail(
           ? { message: error.message, stack: error.stack }
           : error,
     });
-    throw new Error('Failed to get Gmail');
+    throw new Error('Failed to import Gmail');
   }
 }

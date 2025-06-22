@@ -22,8 +22,8 @@ export async function syncGmail(
 ): Promise<string> {
   try {
     const result = await importGmail(token, userId);
-    return `imported ${result}`;
+    return `${userId} ${result}`;
   } catch (e) {
-    throw new workflow.ApplicationFailure('Failed to get IP');
+    throw new workflow.ApplicationFailure('Failed to sync Gmail');
   }
 }

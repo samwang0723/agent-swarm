@@ -1,6 +1,36 @@
 version: '3.8'
 
 services:
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - '7233:7233'
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_SEEDS=db
+      - POSTGRES_DB=temporal
+    networks:
+      - temporal-network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - '8080:8080'
+    networks:
+      - temporal-network
+    depends_on:
+      - temporal
+
   db:
     image: timescale/timescaledb-ha:pg17
     container_name: timescaledb
@@ -9,11 +39,48 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: appdb
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: '--auth-host=md5'
     ports:
       - '5432:5432'
+    networks:
+      - temporal-network
     volumes:
       - db_data:/var/lib/postgresql/data
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./init-temporal-db.sh:/docker-entrypoint-initdb.d/02-init-temporal-db.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d appdb']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  google-assistant:
+    image: mcp/google-assistant:latest
+    ports:
+      - '3003:3003'
+    networks:
+      - temporal-network
+
+  time:
+    image: mcp/time:latest
+    ports:
+      - '3002:3002'
+    networks:
+      - temporal-network
+
+  booking:
+    image: mcp/booking:latest
+    ports:
+      - '3001:3001'
+    networks:
+      - temporal-network
 
 volumes:
   db_data:
+
+networks:
+  temporal-network:
+    driver: bridge
+    name: temporal-network

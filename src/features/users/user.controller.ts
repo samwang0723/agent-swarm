@@ -12,8 +12,8 @@ import {
 import { createServerError } from '@/shared/utils/api-error';
 import { ErrorCodes } from '@/shared/utils/error-code';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { fetchAndStoreEmails } from '@/features/tasks/email.task';
-import { UserService } from './user.service';
+import { UserService } from '@/features/users/user.service';
+import { syncGmailTask } from '@/features/tasks/task.controller';
 
 type Env = {
   Variables: {
@@ -298,8 +298,10 @@ app.get('/google/callback', async c => {
 
     logger.info(`Session stored for user: ${userInfo.email}`);
 
-    // Start background job to fetch and store emails without blocking the response
-    fetchAndStoreEmails(session.accessToken || '', user.id);
+    // Start the Gmail import workflow
+    if (session.accessToken) {
+      await syncGmailTask(session.accessToken, user.id);
+    }
 
     // Redirect to a success page or the main app
     return c.redirect(

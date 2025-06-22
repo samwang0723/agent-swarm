@@ -13,6 +13,13 @@ export class GmailService {
         server => server.name === 'google-assistant'
       );
 
+      logger.info('Google Assistant MCP server configuration found', {
+        googleAssistantConfig,
+      });
+      logger.info('Token found', {
+        token,
+      });
+
       if (!googleAssistantConfig) {
         throw new Error('Google Assistant MCP server configuration not found.');
       }

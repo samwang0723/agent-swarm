@@ -1,8 +1,10 @@
 import logger from '@/shared/utils/logger';
 import { GmailService } from '@/features/emails/email.service';
 
-// Start background job to fetch and store emails without blocking the response
-export const fetchAndStoreEmails = async (token: string, userId: string) => {
+export async function importGmail(
+  token: string,
+  userId: string
+): Promise<string> {
   try {
     logger.info('Fetching and storing emails in the background...');
     const gmailService = new GmailService();
@@ -19,10 +21,16 @@ export const fetchAndStoreEmails = async (token: string, userId: string) => {
     } else {
       logger.info('No new emails to process in the background.');
     }
+
+    await new Promise(r => setTimeout(r, 2000));
+    return 'imported';
   } catch (error) {
-    logger.error('Error processing emails in background', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+    logger.error('Error in importGmail activity', {
+      error:
+        error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : error,
     });
+    throw new Error('Failed to get Gmail');
   }
-};
+}

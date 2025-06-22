@@ -10,13 +10,18 @@ export const syncGmailTask = async (
   const connection = await Connection.connect({
     address: config.temporal.address,
   });
-  const client = new Client({ connection });
 
-  const handle = await client.workflow.start(syncGmail, {
-    taskQueue: config.temporal.taskQueue,
-    args: [token, userId],
-    workflowId: 'importGmail-' + nanoid(),
-  });
+  try {
+    const client = new Client({ connection });
 
-  return handle.workflowId;
+    const handle = await client.workflow.start(syncGmail, {
+      taskQueue: config.temporal.taskQueue,
+      args: [token, userId],
+      workflowId: 'importGmail-' + nanoid(),
+    });
+
+    return handle.workflowId;
+  } finally {
+    await connection.close();
+  }
 };

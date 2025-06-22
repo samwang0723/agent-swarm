@@ -19,6 +19,19 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  temporal-worker:
+    image: temporal-worker:latest
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - DB_HOST=db
+      - GOOGLE_ASSISTANT_MCP_URL=http://google-assistant:3003/mcp
+      - GOOGLE_ASSISTANT_MCP_HEALTH_URL=http://google-assistant:3003/health
+      - GOOGLE_ASSISTANT_MCP_ENABLED=true
+    networks:
+      - temporal-network
+    depends_on:
+      - temporal
+
   temporal-ui:
     image: temporalio/ui:latest
     environment:

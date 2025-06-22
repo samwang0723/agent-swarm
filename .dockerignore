@@ -1,19 +1,32 @@
-node_modules
-npm-debug.log
+# Build artifacts
 dist
+build
+
+# Dependencies
+node_modules
+
+# Git
 .git
 .gitignore
+
+# Docker
+Dockerfile*
+docker-compose.yml
+
+# Logs and environment variables
+*.log
+.env*
+
+# Documentation
 README.md
+
+npm-debug.log
 .env.example
 .nyc_output
 coverage
-.nyc_output
-.coverage
 .eslintrc.js
 jest.config.js
 test-mcp-server.sh
 quick-test.sh
 *.md
-.DS_Store
-Dockerfile
-.dockerignore 
+.DS_Store 

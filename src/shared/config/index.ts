@@ -44,7 +44,7 @@ const config: Config = {
     database: process.env.DB_NAME || 'appdb',
   },
   temporal: {
-    address: process.env.TEMPORAL_ADDRESS || 'localhost:7233',
+    address: process.env.TEMPORAL_ADDRESS || '127.0.0.1:7233',
     namespace: process.env.TEMPORAL_NAMESPACE || 'default',
     taskQueue: process.env.TEMPORAL_TASK_QUEUE || 'default-queue',
     connectTimeout: process.env.TEMPORAL_CONNECT_TIMEOUT

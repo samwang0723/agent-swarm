@@ -58,14 +58,18 @@ CREATE INDEX idx_messages_user_time ON messages(user_id, sent_time DESC);
 CREATE TABLE calendar_events (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    google_event_id TEXT,
     title TEXT,
     description TEXT,
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
     location TEXT,
     attendees JSONB,
+    organizer JSONB,
     status TEXT,
-    PRIMARY KEY (start_time, id)
+    html_link TEXT,
+    PRIMARY KEY (start_time, id),
+    UNIQUE (user_id, google_event_id, start_time)
 );
 
 SELECT create_hypertable('calendar_events', 'start_time', if_not_exists => TRUE);

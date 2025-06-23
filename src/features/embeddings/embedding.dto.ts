@@ -15,3 +15,12 @@ export interface EmailForEmbedding {
   subject?: string;
   body?: string;
 }
+
+export interface CalendarEventForEmbedding {
+  id: string;
+  title?: string | null;
+  description?: string | null;
+  location?: string | null;
+  startTime: Date;
+  endTime: Date;
+}

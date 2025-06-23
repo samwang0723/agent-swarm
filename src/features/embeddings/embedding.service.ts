@@ -5,7 +5,7 @@ import {
   SearchResult,
 } from './embedding.repository';
 import { embed, embedMany } from 'ai';
-import { EmailForEmbedding } from './embedding.dto';
+import { EmailForEmbedding, CalendarEventForEmbedding } from './embedding.dto';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 // Initialize the OpenAI client for embeddings
@@ -45,6 +45,44 @@ export class EmbeddingService {
         userId,
         sourceType: 'email',
         sourceId: email.id,
+        content: contentsToEmbed[i],
+        embedding: embeddings[i],
+      }));
+
+      await batchInsertEmbeddings(embeddingData);
+    } catch (error) {
+      // decide how to handle embedding failure
+      console.error('Failed to create embeddings', error);
+      throw error;
+    }
+  }
+
+  async createEmbeddingsForCalendarEvents(
+    userId: string,
+    events: CalendarEventForEmbedding[]
+  ) {
+    if (events.length === 0) {
+      return;
+    }
+
+    const contentsToEmbed = events.map(event => {
+      const start = event.startTime.toISOString();
+      const end = event.endTime.toISOString();
+      return `${event.title || ''} (from ${start} to ${end}) ${
+        event.description || ''
+      } ${event.location || ''}`;
+    });
+
+    try {
+      const { embeddings } = await embedMany({
+        model: embeddingModel,
+        values: contentsToEmbed,
+      });
+
+      const embeddingData = events.map((event, i) => ({
+        userId,
+        sourceType: 'calendar_event',
+        sourceId: event.id,
         content: contentsToEmbed[i],
         embedding: embeddings[i],
       }));

@@ -32,7 +32,10 @@ services:
     networks:
       - temporal-network
     depends_on:
-      - temporal
+      temporal:
+        condition: service_started
+      db:
+        condition: service_healthy
 
   temporal-ui:
     image: temporalio/ui:latest
@@ -44,7 +47,8 @@ services:
     networks:
       - temporal-network
     depends_on:
-      - temporal
+      temporal:
+        condition: service_started
 
   db:
     image: timescale/timescaledb-ha:pg17

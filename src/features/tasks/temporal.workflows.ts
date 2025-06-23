@@ -4,7 +4,9 @@ import * as workflow from '@temporalio/workflow';
 import type * as activities from '@/features/tasks/temporal.activities';
 
 // Load Activities and assign the Retry Policy
-const { importGmail } = workflow.proxyActivities<typeof activities>({
+const { importGmail, importCalendar } = workflow.proxyActivities<
+  typeof activities
+>({
   retry: {
     initialInterval: '1 second', // amount of time that must elapse before the first retry occurs.
     maximumInterval: '1 minute', // maximum interval between retries.
@@ -15,7 +17,6 @@ const { importGmail } = workflow.proxyActivities<typeof activities>({
 });
 
 // The Temporal Workflow.
-// Just a TypeScript function.
 export async function syncGmail(
   token: string,
   userId: string
@@ -25,5 +26,17 @@ export async function syncGmail(
     return `${userId} ${result}`;
   } catch (e) {
     throw new workflow.ApplicationFailure('Failed to sync Gmail');
+  }
+}
+
+export async function syncCalendar(
+  token: string,
+  userId: string
+): Promise<string> {
+  try {
+    const result = await importCalendar(token, userId);
+    return `${userId} ${result}`;
+  } catch (e) {
+    throw new workflow.ApplicationFailure('Failed to sync Calendar');
   }
 }

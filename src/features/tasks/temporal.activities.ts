@@ -1,6 +1,7 @@
 import logger from '@/shared/utils/logger';
-import { GmailService } from '@/features/emails/email.service';
+import { GmailService } from '@/features/emails';
 import { embeddingService } from '@/features/embeddings';
+import { CalendarService } from '../calendar';
 
 export async function importGmail(
   token: string,
@@ -50,5 +51,58 @@ export async function importGmail(
           : error,
     });
     throw new Error('Failed to import Gmail');
+  }
+}
+
+export async function importCalendar(
+  token: string,
+  userId: string
+): Promise<string> {
+  try {
+    logger.info('Fetching and storing calendar events in the background...');
+    const calendarService = new CalendarService();
+    await calendarService.initialize(token);
+    const eventResponse = await calendarService.getCalendarEvents();
+    const events = eventResponse.events || [];
+
+    logger.info(`Fetched ${events.length} calendar events`);
+    if (events.length > 0) {
+      const insertedEvents = await calendarService.batchInsertCalendarEvents(
+        userId,
+        events
+      );
+      logger.info(
+        `Successfully processed ${insertedEvents.length} events in the background.`
+      );
+
+      const eventsForEmbedding = insertedEvents.map(e => ({
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        location: e.location,
+        startTime: e.startTime,
+        endTime: e.endTime,
+      }));
+
+      await embeddingService.createEmbeddingsForCalendarEvents(
+        userId,
+        eventsForEmbedding
+      );
+      logger.info(
+        `Successfully created embeddings for ${insertedEvents.length} events.`
+      );
+    } else {
+      logger.info('No new calendar events to process in the background.');
+    }
+
+    return 'imported';
+  } catch (error) {
+    logger.error('Error in importCalendar activity', {
+      error:
+        error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : error,
+    });
+    throw new Error('Failed to import Calendar events');
   }
 }

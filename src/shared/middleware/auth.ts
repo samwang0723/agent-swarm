@@ -6,7 +6,10 @@ import { AgentFactory } from '@/features/agents/agent.factory';
 import { createAuthError } from '@/shared/utils/api-error';
 import { ErrorCodes } from '@/shared/utils/error-code';
 import { SessionService } from '@/features/users/user.service';
-import { syncGmailTask } from '@/features/tasks/task.controller';
+import {
+  syncCalendarTask,
+  syncGmailTask,
+} from '@/features/tasks/task.controller';
 
 export interface Session {
   id: string;
@@ -114,6 +117,7 @@ export const refreshAccessTokenIfNeeded = async (
     if (userSession.accessToken) {
       AgentFactory.getInstance().updateAccessToken(userSession.accessToken);
       await syncGmailTask(userSession.accessToken, userSession.id);
+      await syncCalendarTask(userSession.accessToken, userSession.id);
     }
   } catch (error) {
     logger.error('Failed to refresh access token:', error);

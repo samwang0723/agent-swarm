@@ -13,7 +13,10 @@ import { createServerError } from '@/shared/utils/api-error';
 import { ErrorCodes } from '@/shared/utils/error-code';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { UserService } from '@/features/users/user.service';
-import { syncGmailTask } from '@/features/tasks/task.controller';
+import {
+  syncCalendarTask,
+  syncGmailTask,
+} from '@/features/tasks/task.controller';
 
 type Env = {
   Variables: {
@@ -302,6 +305,7 @@ app.get('/google/callback', async c => {
     // Start the Gmail import workflow
     if (session.accessToken) {
       await syncGmailTask(session.accessToken, user.id);
+      await syncCalendarTask(session.accessToken, user.id);
     }
 
     // Redirect to a success page or the main app

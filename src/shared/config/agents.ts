@@ -92,29 +92,29 @@ Use ONLY these tools for routing:
       routingDescription:
         'Call this tool to transfer to the mail assistant. This agent can handle mail services related queries.',
     },
-    {
-      id: 'food_delivery',
-      name: 'Food Delivery Agent',
-      description: 'Handles food delivery platform search automation',
-      mcpServers: ['browser'],
-      systemPromptFile: 'food-delivery',
-      model: 'gemini-2.0-flash',
-      additionalInstructions:
-        '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete result ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
-      enabled: true,
-      requiresAuth: false,
-      routingKeywords: [
-        'food',
-        'delivery',
-        'uber',
-        'ubereats',
-        'doordash',
-        'grubhub',
-        'foodpanda',
-      ],
-      routingDescription:
-        'Call this tool to transfer to the food delivery searchagent.',
-    },
+    // {
+    //   id: 'food_delivery',
+    //   name: 'Food Delivery Agent',
+    //   description: 'Handles food delivery platform search automation',
+    //   mcpServers: ['browser'],
+    //   systemPromptFile: 'food-delivery',
+    //   model: 'gemini-2.0-flash',
+    //   additionalInstructions:
+    //     '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete result ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
+    //   enabled: true,
+    //   requiresAuth: false,
+    //   routingKeywords: [
+    //     'food',
+    //     'delivery',
+    //     'uber',
+    //     'ubereats',
+    //     'doordash',
+    //     'grubhub',
+    //     'foodpanda',
+    //   ],
+    //   routingDescription:
+    //     'Call this tool to transfer to the food delivery searchagent.',
+    // },
     // Add more agents here as needed
   ],
 };

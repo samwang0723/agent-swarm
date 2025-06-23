@@ -1,0 +1,43 @@
+# Build Stage
+FROM oven/bun:1 AS builder
+WORKDIR /usr/src/app
+
+# Copy package management files and install all dependencies
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+
+# Copy the rest of the application source code
+COPY . .
+
+# Build the application
+RUN bun run build
+
+# Production Stage
+FROM oven/bun:1-slim
+WORKDIR /usr/src/app
+
+# Copy package files and install only production dependencies
+COPY package.json bun.lock* ./
+RUN bun install --production --frozen-lockfile
+
+# Copy the built application from the builder stage
+COPY --from=builder /usr/src/app/dist ./dist
+
+# Adjust file ownership for the non-root user
+RUN chown -R bun:bun .
+
+# Switch to the non-root user
+USER bun
+
+# Expose the port the app runs on
+EXPOSE 3000
+
+# Add a healthcheck to verify the API is running correctly.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/v1/health || exit 1
+
+# Set environment to production
+ENV NODE_ENV=production
+
+# The command to run the compiled API
+CMD ["bun", "dist/index.js"] 

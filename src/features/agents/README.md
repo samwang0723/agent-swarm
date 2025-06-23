@@ -6,11 +6,14 @@ A flexible, configuration-driven agent system that supports dynamic agent creati
 
 The agent system consists of several key components:
 
-- **Configuration Layer** (`shared/config/agents.ts`): Declarative agent definitions
-- **Registry** (`agent.repository.ts`): Manages agent lifecycle and handover tools
-- **Factory** (`agent.factory.ts`): Singleton factory for creating agent systems
-- **Utilities** (`agent.util.ts`): Validation and helper functions
-- **Business Logic** (`agent.service.ts`): Main entry point (simplified)
+- **Configuration Layer** (`@/shared/config/agents.ts`): Declarative agent definitions for the entire system.
+- **Controller** (`@/features/agents/agent.controller.ts`): Manages swarm instances, caching, and logging.
+- **Service Layer** (`@/features/agents/agent.service.ts`): Contains factory functions for creating different types of agents.
+- **Factory** (`@/features/agents/agent.factory.ts`): A singleton factory for creating the core `AgentRegistry`.
+- **Repository/Registry** (`@/features/agents/agent.repository.ts`): Manages agent lifecycle, tool creation, and handovers based on the configuration.
+- **DTOs** (`@/features/agents/agent.dto.ts`): Data Transfer Objects and type definitions for the agent system.
+- **Agent Utilities** (`@/features/agents/agent.util.ts`): Utility functions for converting MCP tools for agent use.
+- **Shared Utilities** (`@/shared/utils/agent.ts`): System-wide utilities for configuration validation and generation.
 
 ## Key Features
 
@@ -20,7 +23,7 @@ The agent system consists of several key components:
 ✅ **Bidirectional Handovers**: Agents can transfer back to receptionist  
 ✅ **Extensible**: Easy to add new agents without code changes  
 ✅ **Type Safety**: Full TypeScript support with proper typing  
-✅ **Comprehensive Logging**: Detailed logging for debugging and monitoring
+✅ **Comprehensive Logging**: Detailed logging for debugging and monitoring, managed by the `AgentController`.
 
 ## Configuration
 
@@ -41,7 +44,7 @@ interface AgentConfig {
 }
 ```
 
-### Example Configuration
+### Example Configuration (`@/shared/config/agents.ts`)
 
 ```typescript
 export const agentSystemConfig: AgentSystemConfig = {
@@ -70,20 +73,22 @@ export const agentSystemConfig: AgentSystemConfig = {
 
 ## Usage
 
-The agent system is managed by a `swarm-manager` that handles the lifecycle of agent swarms. Here's how to get and use an agent swarm.
+The agent system is managed by the `AgentController`, which handles the lifecycle of agent swarms.
 
 ### Getting a Swarm Instance
 
-The `getOrCreateSwarm` function in `swarm-manager.ts` is the primary way to get a swarm. It caches swarms by session ID to maintain state across requests.
+The `getOrCreateSwarm` function in `agent.controller.ts` is the primary way to get a swarm. It caches swarms by session ID to maintain state across requests.
 
 ```typescript
-import { getOrCreateSwarm } from '@/agents/swarm-manager';
-import { getCurrentModel } from '@/config/models';
-import { Session } from '@/middleware/auth'; // Assuming a session object
+import { getOrCreateSwarm } from '@/features/agents/agent.controller';
+import { getCurrentModelInfo } from '@/shared/config/models';
+import { Session } from '@/shared/middleware/auth';
+import { createModel } from 'ai';
 
 // Assume you have a session object and a language model
 const session: Session = { id: 'some-session-id', accessToken: '...' };
-const model = getCurrentModel();
+const modelInfo = getCurrentModelInfo();
+const model = createModel({ provider: modelInfo.key });
 
 // Get or create a swarm for the session
 const swarm = getOrCreateSwarm(session, model);
@@ -98,17 +103,16 @@ The `getOrCreateSwarm` function uses `createHiveSwarm` internally, which demonst
 
 ```typescript
 import { LanguageModelV1 } from 'ai';
-import { ChatContext } from '@/agents';
-import createBusinessLogicAgent from '@/agents/business-logic';
-import { ExtendedHive, ExtendedSwarm } from './extended-swarm';
+import { ChatContext, ExtendedHive, ExtendedSwarm } from './agent.dto';
+import { createBusinessLogicAgent } from './agent.service';
 
-// Helper function to create and configure the swarm
+// Helper function to create and configure the swarm (from agent.controller.ts)
 function createHiveSwarm(
   model: LanguageModelV1,
   accessToken?: string
 ): ExtendedSwarm<ChatContext> {
   const hive = new ExtendedHive<ChatContext>({
-    queen: createBusinessLogicAgent(accessToken),
+    queen: createBusinessLogicAgent(accessToken), // The "receptionist" agent
     defaultModel: model,
     defaultContext: { topic: null },
   });
@@ -119,15 +123,15 @@ function createHiveSwarm(
 
 This setup involves:
 
-1.  **`createBusinessLogicAgent`**: Creates the receptionist agent, which is the "queen" of the swarm.
-2.  **`ExtendedHive`**: An extension of the base `Hive` from the `agentswarm` library.
+1.  **`createBusinessLogicAgent`**: Creates the receptionist agent, which is the "queen" of the swarm. This function is the primary entry point, defined in `agent.service.ts`.
+2.  **`ExtendedHive`**: An extension of the base `Hive` from the `agentswarm` library, defined in `agent.dto.ts`.
 3.  **`hive.spawnSwarm()`**: Spawns an `ExtendedSwarm` instance, which is ready to handle user requests.
 
 ## Adding New Agents
 
 ### Step 1: Configure MCP Server
 
-Add your MCP server to `src/config/mcp.ts`:
+Add your MCP server to `src/shared/config/mcp.ts`:
 
 ```typescript
 export const mcpServers: McpServerConfig[] = [
@@ -145,7 +149,7 @@ export const mcpServers: McpServerConfig[] = [
 
 ### Step 2: Create System Prompt
 
-Create `src/config/prompts/your-service.txt`:
+Create `src/shared/prompts/your-service.txt`:
 
 ```
 You are a specialized assistant for [your domain] services.
@@ -159,7 +163,7 @@ Available tools allow you to:
 
 ### Step 3: Add Agent Configuration
 
-Update `src/config/agents.ts`:
+Update `src/shared/config/agents.ts`:
 
 ```typescript
 export const agentSystemConfig: AgentSystemConfig = {
@@ -194,10 +198,13 @@ That's it! The system will automatically:
 
 ### Configuration Validation
 
-```typescript
-import { validateAgentSystemConfig } from '@/agents/utils';
+Located in `src/shared/utils/agent.ts`.
 
-const validation = validateAgentSystemConfig(config);
+```typescript
+import { validateAgentSystemConfig } from '@/shared/utils/agent';
+import { agentSystemConfig } from '@/shared/config/agents';
+
+const validation = validateAgentSystemConfig(agentSystemConfig);
 if (!validation.valid) {
   console.error('Configuration errors:', validation.errors);
 }
@@ -205,8 +212,10 @@ if (!validation.valid) {
 
 ### Agent Template Generation
 
+Located in `src/shared/utils/agent.ts`.
+
 ```typescript
-import { generateAgentTemplate } from '@/agents/utils';
+import { generateAgentTemplate } from '@/shared/utils/agent';
 
 const newAgent = generateAgentTemplate(
   'weather',
@@ -221,23 +230,27 @@ const newAgent = generateAgentTemplate(
 
 ### Finding Agents by Keywords
 
-```typescript
-import { findAgentsByKeyword } from '@/agents/utils';
+Located in `src/shared/utils/agent.ts`.
 
-const restaurantAgents = findAgentsByKeyword(config, 'restaurant');
+```typescript
+import { findAgentsByKeyword } from '@/shared/utils/agent';
+import { agentSystemConfig } from '@/shared/config/agents';
+
+const restaurantAgents = findAgentsByKeyword(agentSystemConfig, 'restaurant');
 ```
 
 ## Migration from Legacy Code
 
-The old `business-logic.ts` file (120 lines) has been replaced with:
+The old monolithic `business-logic.ts` file has been refactored into a modular, configuration-driven architecture:
 
-- **Configuration**: `config/agents.ts` (declarative setup)
-- **Registry**: `registry.ts` (agent management)
-- **Factory**: `factory.ts` (creation logic)
-- **Utilities**: `utils.ts` (validation & helpers)
-- **Main**: `business-logic.ts` (3 lines!)
+- **Configuration**: `src/shared/config/agents.ts`
+- **Controller**: `src/features/agents/agent.controller.ts`
+- **Service**: `src/features/agents/agent.service.ts`
+- **Factory**: `src/features/agents/agent.factory.ts`
+- **Repository**: `src/features/agents/agent.repository.ts`
+- **Utilities**: `src/features/agents/agent.util.ts` & `src/shared/utils/agent.ts`
 
-### Before (120+ lines of complex code)
+### Before (120+ lines of complex, hardcoded logic)
 
 ```typescript
 export default function createBusinessLogicAgent(accessToken?: string) {
@@ -264,15 +277,24 @@ export default function createBusinessLogicAgent(accessToken?: string) {
 }
 ```
 
-### After (Clean & Simple)
+### After (Clean, simple, and factory-driven)
+
+The main entry point in `src/features/agents/agent.service.ts`:
 
 ```typescript
-export default function createBusinessLogicAgent(
-  accessToken?: string
-): Agent<ChatContext> {
+import { Agent } from 'agentswarm';
+import { AgentFactory } from '@/features/agents/agent.factory';
+import { ChatContext } from './agent.dto';
+
+/**
+ * Creates and configures the business logic agent system using the AgentFactory.
+ */
+const createBusinessLogicAgent = (accessToken?: string): Agent<ChatContext> => {
   const factory = AgentFactory.getInstance();
   return factory.createBusinessLogicAgent(accessToken);
-}
+};
+
+export { createBusinessLogicAgent };
 ```
 
 ## Benefits
@@ -306,13 +328,15 @@ The new system is more efficient than the legacy approach:
 - **Lazy Loading**: Agents created only when needed
 - **Validation**: Fail-fast with clear error messages
 - **Caching**: Factory singleton prevents duplicate work
-- **Memory**: Better resource management with proper cleanup
+- **Memory**: Better resource management with proper cleanup and swarm caching.
 
 ## Testing
 
 ```typescript
-import { AgentFactory } from '@/agents/factory';
-import { agentSystemConfig } from '@/config/agents';
+import { AgentFactory } from '@/features/agents/agent.factory';
+import { agentSystemConfig } from '@/shared/config/agents';
+import { createBusinessLogicAgent } from '@/features/agents/agent.service';
+import { validateAgentSystemConfig } from '@/shared/utils/agent';
 
 describe('Agent System', () => {
   beforeEach(() => {

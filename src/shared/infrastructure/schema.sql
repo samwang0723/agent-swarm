@@ -79,7 +79,8 @@ CREATE TABLE embeddings (
     source_id UUID,
     content TEXT,
     embedding VECTOR(1536),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, source_type, source_id)
 );
 
 CREATE INDEX idx_embedding_vector ON embeddings

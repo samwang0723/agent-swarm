@@ -1661,6 +1661,8 @@
                       performance.now() - messageStartTime
                     );
                     updateLatency(totalLatency);
+                    // Set to null to prevent recalculation in finally block
+                    messageStartTime = null;
                   }
                   updateStreamingMessage(accumulatedText);
                 } else if (event === 'error') {
@@ -1685,6 +1687,15 @@
           if (isStreaming) {
             updateStreamingMessage(accumulatedText);
           }
+
+          // If latency wasn't already calculated by a 'finish' event, calculate it now.
+          if (messageStartTime) {
+            const totalLatency = Math.round(
+              performance.now() - messageStartTime
+            );
+            updateLatency(totalLatency);
+          }
+
           // Re-enable controls
           isStreaming = false;
           document.getElementById('sendBtn').disabled = false;
@@ -1726,6 +1737,18 @@
               if (Array.isArray(content)) {
                 content = content[0]?.text || '';
               }
+
+              // If it's a user message from history, extract only the original question
+              if (isUser) {
+                const questionMarker = '\n\nQuestion: ';
+                const questionIndex = content.indexOf(questionMarker);
+                if (questionIndex !== -1) {
+                  content = content.substring(
+                    questionIndex + questionMarker.length
+                  );
+                }
+              }
+
               if (content === '') {
                 return;
               }

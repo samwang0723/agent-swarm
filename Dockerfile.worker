@@ -1,0 +1,13 @@
+FROM node:20-slim
+
+WORKDIR /usr/src/app
+
+# Copy package files and install all dependencies
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Copy the rest of the application source code
+COPY . .
+
+# Run the worker directly with tsx
+CMD ["npx", "tsx", "src/features/tasks/temporal.worker.ts"]

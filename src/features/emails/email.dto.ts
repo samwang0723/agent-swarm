@@ -17,6 +17,7 @@ export interface GmailListResponse {
 }
 
 export interface GmailMessage {
+  id?: string;
   userId: string;
   messageId: string;
   threadId: string;

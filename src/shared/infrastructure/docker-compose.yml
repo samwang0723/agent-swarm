@@ -24,6 +24,7 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - DB_HOST=db
+      - GOOGLE_API_KEY=
       - OPENAI_API_KEY=
       - GOOGLE_ASSISTANT_MCP_URL=http://google-assistant:3003/mcp
       - GOOGLE_ASSISTANT_MCP_HEALTH_URL=http://google-assistant:3003/health

@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai';
+// import { createOpenAI } from '@ai-sdk/openai';
 import {
   batchInsertEmbeddings,
   searchEmbeddings,
@@ -6,14 +6,23 @@ import {
 } from './embedding.repository';
 import { embed, embedMany } from 'ai';
 import { EmailForEmbedding } from './embedding.dto';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 // Initialize the OpenAI client for embeddings
-const openai = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// const openai = createOpenAI({
+//   apiKey: process.env.OPENAI_API_KEY,
+// });
 
 // Specify the embedding model, e.g., 'text-embedding-3-small'
-const embeddingModel = openai.embedding('text-embedding-3-small');
+// const embeddingModel = openai.embedding('text-embedding-3-small');
+
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_API_KEY,
+});
+const embeddingModel = google.textEmbeddingModel('gemini-embedding-exp-03-07', {
+  outputDimensionality: 1536, // optional, number of dimensions for the embedding
+  taskType: 'SEMANTIC_SIMILARITY', // optional, specifies the task type for generating embeddings
+});
 
 export class EmbeddingService {
   async createEmbeddingsForEmails(userId: string, emails: EmailForEmbedding[]) {
@@ -53,7 +62,7 @@ export class EmbeddingService {
     queryText: string,
     options: { limit?: number; similarityThreshold?: number } = {}
   ): Promise<SearchResult[]> {
-    const { limit = 5, similarityThreshold = 0.4 } = options;
+    const { limit = 5, similarityThreshold = 0.6 } = options;
 
     try {
       const { embedding } = await embed({

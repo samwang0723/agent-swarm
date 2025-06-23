@@ -30,7 +30,7 @@ export class GmailService {
       throw new Error('Gmail service not initialized.');
     }
     const response = await this.client.callTool('gmail_list_emails', {
-      maxResults: 10,
+      maxResults: 20,
       query:
         'in:inbox is:unread newer_than:3d -category:promotions -category:social -category:forums',
     });

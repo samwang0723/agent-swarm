@@ -11,10 +11,10 @@ export async function importGmail(
     const gmailService = new GmailService();
     await gmailService.initialize(token);
     const emailResponse = await gmailService.getEmails();
-    const emails = emailResponse.messages;
+    const emails = emailResponse.messages || [];
 
     logger.info(`Fetched ${emails.length} emails`);
-    if (emails && emails.length > 0) {
+    if (emails.length > 0) {
       const insertedEmails = await gmailService.batchInsertEmails(
         userId,
         emails

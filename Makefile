@@ -15,6 +15,14 @@ dev:
 build:
 	bun run build
 
+# Docker build api
+docker-build-api:
+	docker build -t api -f Dockerfile.api .
+
+# Docker build frontend
+docker-build-worker:
+	docker build -t temporal-worker -f Dockerfile.worker .
+
 # Run tests
 test:
 	bun test
@@ -33,4 +41,5 @@ clean:
 	rm -rf build/
 	rm -rf coverage/
 	rm -rf node_modules/
-	rm -f bun.lockb 
+	rm -f bun.lock
+	rm -f package-lock.json

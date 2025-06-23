@@ -36,3 +36,44 @@ export const batchInsertEmbeddings = async (embeddings: EmbeddingData[]) => {
 
   await query(text, formattedValues);
 };
+
+export interface SearchResult {
+  content: string;
+  similarity: number;
+}
+
+export const searchEmbeddings = async (
+  userId: string,
+  embedding: number[],
+  limit: number,
+  offset = 0,
+  sourceType?: string
+): Promise<SearchResult[]> => {
+  const embeddingString = `[${embedding.join(',')}]`;
+  const queryParams: (string | number)[] = [
+    userId,
+    embeddingString,
+    limit,
+    offset,
+  ];
+  const whereClauses = ['user_id = $1'];
+
+  if (sourceType) {
+    queryParams.push(sourceType);
+    whereClauses.push(`source_type = $${queryParams.length}`);
+  }
+
+  const text = `
+    SELECT
+      content,
+      1 - (embedding <=> $2::vector) AS similarity
+    FROM embeddings
+    WHERE ${whereClauses.join(' AND ')}
+    ORDER BY similarity DESC
+    LIMIT $3
+    OFFSET $4
+  `;
+
+  const { rows } = await query(text, queryParams);
+  return rows as SearchResult[];
+};

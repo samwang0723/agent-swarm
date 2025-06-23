@@ -1737,6 +1737,18 @@
               if (Array.isArray(content)) {
                 content = content[0]?.text || '';
               }
+
+              // If it's a user message from history, extract only the original question
+              if (isUser) {
+                const questionMarker = '\n\nQuestion: ';
+                const questionIndex = content.indexOf(questionMarker);
+                if (questionIndex !== -1) {
+                  content = content.substring(
+                    questionIndex + questionMarker.length
+                  );
+                }
+              }
+
               if (content === '') {
                 return;
               }

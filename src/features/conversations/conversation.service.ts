@@ -7,6 +7,22 @@ import {
   getOrCreateSwarm,
   logToolInformation,
 } from '@/features/agents/agent.swarm';
+import { embeddingService } from '@/features/embeddings';
+
+const shouldSearchEmails = (message: string): boolean => {
+  const keywords = [
+    'email',
+    'mail',
+    'inbox',
+    'gmail',
+    'outlook',
+    'sender',
+    'recipient',
+    'subject',
+  ];
+  const lowerCaseMessage = message.toLowerCase();
+  return keywords.some(keyword => lowerCaseMessage.includes(keyword));
+};
 
 // Helper function to handle text streaming with efficient accumulation
 async function streamText(
@@ -41,8 +57,30 @@ export async function sendMessage(
   message: string,
   outputStrategy: OutputStrategy
 ) {
+  let augmentedMessage = message;
+
+  // RAG: Retrieve context from embeddings if intent is matched
+  if (shouldSearchEmails(message)) {
+    const searchResults = await embeddingService.searchEmails(
+      session.id,
+      message
+    );
+
+    if (searchResults && searchResults.length > 0) {
+      const context = searchResults.map(r => r.content).join('\n\n---\n\n');
+      augmentedMessage = `Based on the following context from emails, please answer question or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+      logger.info({
+        message: 'Augmented user message with email context.',
+        userId: session.id,
+        resultsCount: searchResults.length,
+      });
+    }
+  }
+
+  logger.info(`Augmented message: ${augmentedMessage}`);
+
   // Add user message to history and get current history
-  messageHistory.addUserMessage(session.id, message);
+  messageHistory.addUserMessage(session.id, augmentedMessage);
   const history = messageHistory.getHistory(session.id);
 
   // Get or create swarm for this user

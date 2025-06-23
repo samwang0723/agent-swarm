@@ -1,6 +1,10 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { batchInsertEmbeddings } from './embedding.repository';
-import { embedMany } from 'ai';
+import {
+  batchInsertEmbeddings,
+  searchEmbeddings,
+  SearchResult,
+} from './embedding.repository';
+import { embed, embedMany } from 'ai';
 import { EmailForEmbedding } from './embedding.dto';
 
 // Initialize the OpenAI client for embeddings
@@ -41,6 +45,34 @@ export class EmbeddingService {
       // decide how to handle embedding failure
       console.error('Failed to create embeddings', error);
       throw error;
+    }
+  }
+
+  async searchEmails(
+    userId: string,
+    queryText: string,
+    options: { limit?: number; similarityThreshold?: number } = {}
+  ): Promise<SearchResult[]> {
+    const { limit = 5, similarityThreshold = 0.4 } = options;
+
+    try {
+      const { embedding } = await embed({
+        model: embeddingModel,
+        value: queryText,
+      });
+
+      const results = await searchEmbeddings(
+        userId,
+        embedding,
+        limit,
+        0,
+        'email'
+      );
+
+      return results.filter(r => r.similarity > similarityThreshold);
+    } catch (error) {
+      console.error('Failed to search embeddings', error);
+      return [];
     }
   }
 }

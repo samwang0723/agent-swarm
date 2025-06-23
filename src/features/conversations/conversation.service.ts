@@ -6,7 +6,7 @@ import { Session } from '@/shared/middleware/auth';
 import {
   getOrCreateSwarm,
   logToolInformation,
-} from '@/features/agents/agent.controller';
+} from '@/features/agents/agent.swarm';
 
 // Helper function to handle text streaming with efficient accumulation
 async function streamText(

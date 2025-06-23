@@ -40,10 +40,10 @@ export class GmailService {
   public async batchInsertEmails(
     userId: string,
     messages: RawGmailMessage[]
-  ): Promise<void> {
+  ): Promise<(GmailMessage & { id: string })[]> {
     if (messages.length === 0) {
       logger.info('No emails to insert.');
-      return;
+      return [];
     }
 
     const formattedEmails: GmailMessage[] = messages.map(message => {
@@ -69,7 +69,21 @@ export class GmailService {
     });
 
     try {
-      await emailRepo.insertEmails(formattedEmails);
+      const inserted = await emailRepo.insertEmails(formattedEmails);
+
+      const fullInsertedEmails = formattedEmails
+        .map(formattedEmail => {
+          const dbRecord = inserted.find(
+            i => i.message_id === formattedEmail.messageId
+          );
+          return {
+            ...formattedEmail,
+            id: dbRecord?.id,
+          };
+        })
+        .filter((e): e is GmailMessage & { id: string } => !!e.id);
+
+      return fullInsertedEmails;
     } catch (error) {
       logger.error('Error inserting emails into database', {
         error,

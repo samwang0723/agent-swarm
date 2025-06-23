@@ -3,12 +3,10 @@ import { messageHistory } from './history.service';
 import { OutputStrategy } from './conversation.dto';
 import logger from '@/shared/utils/logger';
 import { Session } from '@/shared/middleware/auth';
-import {
-  getOrCreateSwarm,
-  logToolInformation,
-} from '@/features/agents/agent.swarm';
+import { getOrCreateSwarm } from '@/features/agents/agent.swarm';
 import { embeddingService } from '@/features/embeddings';
 import { Message } from './conversation.dto';
+import { logToolInformation } from './conversation.util';
 
 const shouldSearchEmails = (message: string): boolean => {
   const keywords = [

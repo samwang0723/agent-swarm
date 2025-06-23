@@ -5,7 +5,6 @@ import {
   Swarm,
   type SwarmOptions,
 } from 'agentswarm';
-import { LanguageModelUsage, ToolCall, ToolResult } from 'ai';
 import { z } from 'zod';
 
 export const UBER_EATS_DOMAIN = 'https://www.ubereats.com';
@@ -29,13 +28,6 @@ export interface HandoverTool {
     agent: Agent<ChatContext>;
     context: { topic: string };
   }>;
-}
-
-export interface LoggableEvent {
-  usage: LanguageModelUsage;
-  stepType: 'initial' | 'continue' | 'tool-result';
-  toolCalls?: ToolCall<string, unknown>[];
-  toolResults?: ToolResult<string, unknown, unknown>[];
 }
 
 export class ExtendedSwarm<

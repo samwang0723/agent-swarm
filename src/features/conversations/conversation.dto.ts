@@ -1,9 +1,15 @@
-import { CoreMessage } from 'ai';
+import { CoreMessage, LanguageModelUsage, ToolCall, ToolResult } from 'ai';
 import { SSEStreamingApi } from 'hono/streaming';
 import logger from '@/shared/utils/logger';
 
 export type Message = CoreMessage;
 
+export interface LoggableEvent {
+  usage: LanguageModelUsage;
+  stepType: 'initial' | 'continue' | 'tool-result';
+  toolCalls?: ToolCall<string, unknown>[];
+  toolResults?: ToolResult<string, unknown, unknown>[];
+}
 export interface OutputStrategy {
   onStart?: (data: { sessionId: string; streaming: boolean }) => void;
   onChunk: (text: string, accumulated: string) => void;

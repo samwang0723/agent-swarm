@@ -122,4 +122,32 @@ export class EmbeddingService {
       return [];
     }
   }
+
+  async searchCalendarEvents(
+    userId: string,
+    queryText: string,
+    options: { limit?: number; similarityThreshold?: number } = {}
+  ): Promise<SearchResult[]> {
+    const { limit = 5, similarityThreshold = 0.6 } = options;
+
+    try {
+      const { embedding } = await embed({
+        model: embeddingModel,
+        value: queryText,
+      });
+
+      const results = await searchEmbeddings(
+        userId,
+        embedding,
+        limit,
+        0,
+        'calendar_event'
+      );
+
+      return results.filter(r => r.similarity > similarityThreshold);
+    } catch (error) {
+      console.error('Failed to search embeddings', error);
+      return [];
+    }
+  }
 }

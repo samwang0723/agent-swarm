@@ -23,6 +23,21 @@ const shouldSearchEmails = (message: string): boolean => {
   return keywords.some(keyword => lowerCaseMessage.includes(keyword));
 };
 
+const shouldSearchCalendar = (message: string): boolean => {
+  const keywords = [
+    'calendar',
+    'event',
+    'meeting',
+    'schedule',
+    'appointment',
+    'agenda',
+    'when is my',
+    'what is on my',
+  ];
+  const lowerCaseMessage = message.toLowerCase();
+  return keywords.some(keyword => lowerCaseMessage.includes(keyword));
+};
+
 // Helper function to handle text streaming with efficient accumulation
 async function readTextStream(
   textStream: AsyncIterable<string>,
@@ -166,6 +181,22 @@ export async function sendMessage(
       augmentedMessage = `Based on the following context from emails, please answer question or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
       logger.info({
         message: 'Augmented user message with email context.',
+        userId: session.id,
+        resultsCount: searchResults.length,
+      });
+      ragApplied = true;
+    }
+  } else if (shouldSearchCalendar(message)) {
+    const searchResults = await embeddingService.searchCalendarEvents(
+      session.id,
+      message
+    );
+
+    if (searchResults && searchResults.length > 0) {
+      const context = searchResults.map(r => r.content).join('\n\n---\n\n');
+      augmentedMessage = `Based on the following context from your calendar, please answer question or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+      logger.info({
+        message: 'Augmented user message with calendar context.',
         userId: session.id,
         resultsCount: searchResults.length,
       });

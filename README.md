@@ -9,6 +9,30 @@ A powerful AI Agent Swarm application built with TypeScript and Hono, featuring 
 
 ![Screenshot 2025-06-12 at 4 55 46 PM](https://github.com/user-attachments/assets/42b1661a-1e4e-495d-8d85-d9e8fb83f566)
 
+```text
+             +-----------------------------+
+             |  User Question (NL Prompt)  |
+             +-----------------------------+
+                          |
+                          v
+         +--------------------------------------+
+         | LLM-Orchestrator (your backend API)  |
+         | - Parses intent                      |
+         | - Embedding search (if needed)       |
+         | - SQL query / summarization          |
+         +------------------+-------------------+
+                            |
+                +-----------+------------+
+                |    Embedding Layer     |
+                |  (Postgres + pgvector) |
+                +------------------------+
+                            |
+                +-----------+------------+
+                |      Data Store        |
+                | (emails, events, etc.) |
+                +------------------------+
+```
+
 ## 🚀 Features
 
 - **🤖 AgentSwarm Integration**: Built on the AgentSwarm framework with Hive/Swarm architecture
@@ -176,11 +200,18 @@ The server will start on `http://localhost:3000` with:
 ### Example API Usage
 
 ```bash
-# 1. Authenticate with Google (opens browser)
-curl http://localhost:3000/api/v1/auth/google
+# 1. Authenticate with Google
+# Open the following URL in your web browser to start the Google authentication flow.
+# After you log in, you will be redirected to a callback page that displays your session token.
+#
+# http://localhost:3000/api/v1/auth/google
 
-# 2. Use the session token from callback in subsequent requests
-TOKEN="your_session_token_here"
+# 2. Set the session token for your terminal
+# Copy the token from the browser and run the following command in your terminal.
+# Replace "your_session_token_here" with the actual token. (Can check from cookie `auth_token`)
+export TOKEN="your_session_token_here"
+
+# Now you can use the API with your token.
 
 # Streaming chat
 curl -X POST http://localhost:3000/api/v1/chat/stream \

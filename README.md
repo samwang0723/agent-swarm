@@ -81,6 +81,8 @@ cp .env.example .env
 This command starts the PostgreSQL database, Temporal, and other required services defined in `docker-compose.yml`.
 
 ```bash
+make docker-build-worker
+
 cd src/shared/infrastructure
 docker-compose up -d
 cd ../../.. # Return to the root directory

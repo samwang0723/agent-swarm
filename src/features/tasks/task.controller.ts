@@ -28,7 +28,7 @@ export const syncGmailTask = async (
     try {
       // Start the cron workflow
       await client.workflow.start(syncGmail, {
-        cronSchedule: '*/5 * * * *',
+        cronSchedule: '*/10 * * * *',
         taskQueue: config.temporal.taskQueue,
         args: [token, userId],
         workflowId: `importGmail-cron-${userId}`,

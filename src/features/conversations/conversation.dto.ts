@@ -76,12 +76,23 @@ export class HonoSSEOutput implements OutputStrategy {
 
 export class CollectOutput implements OutputStrategy {
   private fullText = '';
+  private errorMessage: string | null = null;
 
   onChunk(text: string, accumulated: string): void {
+    if (this.errorMessage) {
+      return;
+    }
     this.fullText = accumulated;
   }
 
+  onError(error: string): void {
+    this.errorMessage = error;
+  }
+
   getFullText(): string {
+    if (this.errorMessage) {
+      throw new Error(this.errorMessage);
+    }
     return this.fullText;
   }
 }

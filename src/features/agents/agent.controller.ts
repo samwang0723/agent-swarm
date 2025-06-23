@@ -1,18 +1,11 @@
 import { LanguageModelV1, LanguageModelUsage, ToolCall, ToolResult } from 'ai';
-import { ChatContext } from './agent.dto';
+import { ChatContext, LoggableEvent } from './agent.dto';
 import { createBusinessLogicAgent } from './agent.service';
 import logger from '@/shared/utils/logger';
 import { calculateCost } from '@/shared/utils/costs';
 import { getCurrentModelInfo } from '@/shared/config/models';
 import { Session } from '@/shared/middleware/auth';
 import { ExtendedHive, ExtendedSwarm } from './agent.dto';
-
-interface LoggableEvent {
-  usage: LanguageModelUsage;
-  stepType: 'initial' | 'continue' | 'tool-result';
-  toolCalls?: ToolCall<string, unknown>[];
-  toolResults?: ToolResult<string, unknown, unknown>[];
-}
 
 // Cache for swarms to persist across messages
 export const swarmCache = new Map<string, ExtendedSwarm<ChatContext>>();

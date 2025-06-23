@@ -8,7 +8,7 @@ import {
   getAvailableModels,
 } from '@/shared/config/models';
 import { requireAuth } from '@/shared/middleware/auth';
-import { initializeSwarm } from '@/features/agents/agent.swarm';
+import { initializeSwarm } from '@/features/agents/agent.controller';
 import { messageHistory } from './history.service';
 import { sendMessage } from './conversation.service';
 import { HonoSSEOutput, OutputStrategy } from './conversation.dto';

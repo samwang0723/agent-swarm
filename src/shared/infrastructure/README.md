@@ -1,79 +1,71 @@
 # Infrastructure Components
 
-This directory contains core infrastructure components for the application.
+This directory contains core infrastructure components for the application, including database setup, schema definitions, and local development environment configuration.
 
-## Temporal Connection Manager
+## Database
 
-The Temporal connection manager (`temporal.ts`) provides a singleton pattern for managing Temporal.io connections and operations.
+### Connection (`database.ts`)
 
-### Features
+This module provides a PostgreSQL connection pool and query utilities using the `pg` library. It's configured via `config.db`.
 
-- **Singleton Pattern**: Ensures single connection instance across the application
-- **Auto-reconnection**: Implements exponential backoff retry logic
-- **Health Monitoring**: Real-time connection health checks
-- **Worker Management**: Create, start, and stop workers with proper lifecycle management
-- **Graceful Shutdown**: Handles application shutdown gracefully
-- **Type Safety**: Full TypeScript support with proper type definitions
+**Features:**
 
-### Usage
+- Connection pooling via `pg.Pool`.
+- Error handling for idle clients.
+- A `query` function that logs query execution time and results.
+- A `getClient` function to get a client from the pool.
+
+**Usage:**
 
 ```typescript
-import {
-  temporalManager,
-  executeWorkflow,
-  createTemporalWorker,
-} from '@/shared/infrastructure/temporal';
+import { query, getClient } from '@/shared/infrastructure/database';
 
-// Initialize connection
-await temporalManager.connect();
+// Execute a query
+const { rows } = await query('SELECT * FROM users WHERE id = $1', [userId]);
 
-// Create and start a worker
-const worker = await createTemporalWorker('my-worker', {
-  workflowsPath: require.resolve('./workflows'),
-  activities: require('./activities'),
-  taskQueue: 'my-queue',
-});
-
-// Execute a workflow
-const handle = await executeWorkflow('MyWorkflow', [arg1, arg2], {
-  workflowId: 'my-workflow-id',
-  taskQueue: 'my-queue',
-});
-
-// Check connection status
-const isHealthy = temporalManager.isHealthy();
-const stats = temporalManager.getStats();
+// Get a client for a transaction
+const client = await getClient();
+try {
+  await client.query('BEGIN');
+  // ... do transaction queries
+  await client.query('COMMIT');
+} catch (e) {
+  await client.query('ROLLBACK');
+  throw e;
+} finally {
+  client.release();
+}
 ```
 
-### Configuration
+### Schema (`schema.sql`)
 
-Configure via environment variables:
+This file defines the complete database schema for the application. It includes table definitions for:
 
-```bash
-TEMPORAL_ADDRESS=localhost:7233
-TEMPORAL_NAMESPACE=default
-TEMPORAL_TASK_QUEUE=default-queue
-TEMPORAL_CONNECT_TIMEOUT=10000
-TEMPORAL_RPC_TIMEOUT=30000
-```
+- `users`
+- `integrations`
+- `emails`
+- `messages`
+- `calendar_events` (as a TimescaleDB hypertable)
+- `embeddings` (with `vectorscale` for vector storage)
+- `summaries`
+- `sessions`
 
-### Architecture Decisions
+It also sets up required PostgreSQL extensions like `vectorscale` and `uuid-ossp`.
 
-1. **Singleton Pattern**: Prevents multiple connection instances and ensures consistent configuration
-2. **Health Monitoring**: Proactive connection monitoring with automatic recovery
-3. **Worker Lifecycle**: Proper worker management with graceful shutdown
-4. **Type Safety**: Full TypeScript support for better developer experience
-5. **Error Handling**: Comprehensive error handling with structured logging
+### Database Initialization (`init-temporal-db.sh`)
 
-## Database Connection
+This script is used within the Docker Compose setup to create the `temporal` database required by the Temporal.io server.
 
-The database connection (`database.ts`) provides PostgreSQL connection pooling and query utilities.
+## Docker Compose (`docker-compose.yml`)
 
-## Docker Compose
+The `docker-compose.yml` file configures the local development environment. It sets up the following services:
 
-The `docker-compose.yml` file sets up the development environment with:
+- **`temporal`**: The Temporal.io server for workflow orchestration.
+- **`temporal-worker`**: A container for running Temporal workers.
+- **`temporal-ui`**: The web UI for the Temporal server.
+- **`db`**: A TimescaleDB instance (PostgreSQL with time-series capabilities) that serves as the main application database (`appdb`) and also hosts the `temporal` database.
+- **`google-assistant`**: Mock MCP service for Google Assistant.
+- **`time`**: Mock MCP service for time-related functions.
+- **`booking`**: Mock MCP service for booking.
 
-- Temporal server
-- Temporal UI
-- TimescaleDB (PostgreSQL extension)
-- Proper networking and dependencies
+All services are connected via a `temporal-network` bridge network. The `db` service persists data to a Docker volume `db_data`.

@@ -7,9 +7,6 @@
 
 A powerful AI Agent Swarm application built with TypeScript and Hono, featuring intelligent agent routing using the AgentSwarm framework, MCP (Model Context Protocol) tool integration, Google OAuth authentication, and unified output strategies for seamless AI interaction.
 
-![Screenshot 2025-06-24 at 11 49 01 AM](https://github.com/user-attachments/assets/24f2241a-7c82-479b-9fe5-f0bf820710ea)
-
-
 ## 🚀 Features
 
 - **🤖 AgentSwarm Integration**: Built on the AgentSwarm framework with Hive/Swarm architecture

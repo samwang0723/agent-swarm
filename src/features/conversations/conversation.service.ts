@@ -5,8 +5,13 @@ import logger from '@/shared/utils/logger';
 import { Session } from '@/shared/middleware/auth';
 import { getOrCreateSwarm } from '@/features/agents/agent.swarm';
 import { embeddingService } from '@/features/embeddings';
+import { getCalendarEventsByTimeRange } from '@/features/calendar/calendar.repository';
 import { Message } from './conversation.dto';
-import { logToolInformation } from './conversation.util';
+import {
+  logToolInformation,
+  extractTimeRange,
+  detectClientTimezone,
+} from './conversation.util';
 
 const shouldSearchEmails = (message: string): boolean => {
   const keywords = [
@@ -164,10 +169,37 @@ export async function sendMessage(
   session: Session,
   model: LanguageModelV1,
   message: string,
-  outputStrategy: OutputStrategy
+  outputStrategy: OutputStrategy,
+  requestHeaders?: Record<string, string | string[] | undefined>
 ) {
   let augmentedMessage = message;
   let ragApplied = false;
+
+  // Detect client timezone if headers are provided
+  let clientTimezone = 'UTC';
+  if (requestHeaders) {
+    try {
+      clientTimezone = await detectClientTimezone(requestHeaders);
+    } catch (error) {
+      logger.warn('Failed to detect client timezone:', error);
+      // Continue with UTC as fallback
+    }
+  }
+
+  // Check for time-sensitive messages and extract date range with timezone
+  const timeRange = extractTimeRange(message, clientTimezone);
+  if (timeRange) {
+    logger.info({
+      message: 'Detected time-sensitive message',
+      userId: session.id,
+      timeRange: `${timeRange.from} to ${timeRange.to}`,
+      timezone: clientTimezone,
+      originalMessage: message,
+    });
+
+    // Augment message with time range information
+    augmentedMessage = `${message}\n\n[Time Range Context: ${timeRange.from} to ${timeRange.to}, Timezone: ${clientTimezone}]`;
+  }
 
   // RAG: Retrieve context from embeddings if intent is matched
   if (shouldSearchEmails(message)) {
@@ -178,7 +210,7 @@ export async function sendMessage(
 
     if (searchResults && searchResults.length > 0) {
       const context = searchResults.map(r => r.content).join('\n\n---\n\n');
-      augmentedMessage = `Based on the following context from emails, please answer question or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+      augmentedMessage += `Based on the following context from emails, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
       logger.info({
         message: 'Augmented user message with email context.',
         userId: session.id,
@@ -187,20 +219,49 @@ export async function sendMessage(
       ragApplied = true;
     }
   } else if (shouldSearchCalendar(message)) {
-    const searchResults = await embeddingService.searchCalendarEvents(
-      session.id,
-      message
-    );
+    // If timeRange is available, use direct database query
+    if (timeRange) {
+      const calendarResults = await getCalendarEventsByTimeRange(
+        session.id,
+        session.email,
+        timeRange.from,
+        timeRange.to,
+        10
+      );
 
-    if (searchResults && searchResults.length > 0) {
-      const context = searchResults.map(r => r.content).join('\n\n---\n\n');
-      augmentedMessage = `Based on the following context from your calendar, please answer question or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
-      logger.info({
-        message: 'Augmented user message with calendar context.',
-        userId: session.id,
-        resultsCount: searchResults.length,
-      });
-      ragApplied = true;
+      if (calendarResults && calendarResults.length > 0) {
+        const context = calendarResults
+          .map(
+            r =>
+              `(${r.start_time} to ${r.end_time}) [${r.title}] ${r.description}`
+          )
+          .join('\n\n---\n\n');
+        augmentedMessage += `Based on the following context from your calendar events in the specified time range, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+        logger.info({
+          message: 'Augmented user message with time-range calendar context.',
+          userId: session.id,
+          resultsCount: calendarResults.length,
+          timeRange: `${timeRange.from} to ${timeRange.to}`,
+        });
+        ragApplied = true;
+      }
+    } else {
+      // Fallback to embedding search when no time range is provided
+      const searchResults = await embeddingService.searchCalendarEvents(
+        session.id,
+        message
+      );
+
+      if (searchResults && searchResults.length > 0) {
+        const context = searchResults.map(r => r.content).join('\n\n---\n\n');
+        augmentedMessage += `Based on the following context from your calendar, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+        logger.info({
+          message: 'Augmented user message with calendar context.',
+          userId: session.id,
+          resultsCount: searchResults.length,
+        });
+        ragApplied = true;
+      }
     }
   }
 

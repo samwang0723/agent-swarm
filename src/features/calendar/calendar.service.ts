@@ -2,7 +2,9 @@ import * as calendarRepo from './calendar.repository';
 import {
   GoogleCalendarEvent,
   CalendarEvent,
-  GoogleCalendarListResponse,
+  GoogleCalendarListEventsResponse,
+  GoogleCalendarInfo,
+  GoogleCalendarsResponse,
 } from './calendar.dto';
 import logger from '@/shared/utils/logger';
 import { McpClient } from '@/features/mcp/mcp.service';
@@ -29,7 +31,7 @@ export class CalendarService {
     }
   }
 
-  public async getCalendarEvents(): Promise<GoogleCalendarListResponse> {
+  public async getCalendarEvents(): Promise<GoogleCalendarListEventsResponse> {
     if (!this.client) {
       throw new Error('Calendar service not initialized.');
     }
@@ -47,12 +49,41 @@ export class CalendarService {
     endOfNextWeek.setDate(endOfNextWeek.getDate() + 14); // Two weeks from start of week
     endOfNextWeek.setMilliseconds(-1); // End of the day before
 
-    const response = await this.client.callTool('gcalendar_list_events', {
+    const listCalendarsResponse = (await this.client.callTool(
+      'gcalendar_list_calendars',
+      {}
+    )) as GoogleCalendarsResponse;
+    const calendars = listCalendarsResponse.response || [];
+
+    // 1. if primary id exists, using primary
+    // 2. if no primary id, using id equals to email (using regex)
+    let primaryCalendar = calendars.find(
+      (calendar: GoogleCalendarInfo) => calendar.id === 'primary'
+    );
+
+    if (!primaryCalendar) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      primaryCalendar = calendars.find((calendar: GoogleCalendarInfo) =>
+        emailRegex.test(calendar.id)
+      );
+    }
+
+    const response = (await this.client.callTool('gcalendar_list_events', {
+      calendarId: primaryCalendar?.id || 'primary',
       timeMin: startOfWeek.toISOString(),
       timeMax: endOfNextWeek.toISOString(),
       maxResults: 50,
-    });
-    return response as GoogleCalendarListResponse;
+    })) as GoogleCalendarListEventsResponse;
+
+    // Process the response to strip HTML tags from event descriptions
+    if (response.events && Array.isArray(response.events)) {
+      response.events = response.events.map((event: GoogleCalendarEvent) => ({
+        ...event,
+        description: this.stripHtmlTags(event.description),
+      }));
+    }
+
+    return response;
   }
 
   private parseEventTime(eventTime: {
@@ -60,6 +91,28 @@ export class CalendarService {
     dateTime?: string;
   }): Date {
     return new Date(eventTime.dateTime || eventTime.date!);
+  }
+
+  private stripHtmlTags(
+    htmlString: string | null | undefined
+  ): string | undefined {
+    if (!htmlString) {
+      return undefined;
+    }
+
+    // Remove HTML tags using regex and decode HTML entities
+    const stripped = htmlString
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .replace(/&nbsp;/g, ' ') // Replace non-breaking spaces
+      .replace(/&amp;/g, '&') // Replace encoded ampersands
+      .replace(/&lt;/g, '<') // Replace encoded less than
+      .replace(/&gt;/g, '>') // Replace encoded greater than
+      .replace(/&quot;/g, '"') // Replace encoded quotes
+      .replace(/&#39;/g, "'") // Replace encoded single quotes
+      .replace(/\s+/g, ' ') // Replace multiple whitespace with single space
+      .trim(); // Remove leading/trailing whitespace
+
+    return stripped || undefined;
   }
 
   public async batchInsertCalendarEvents(
@@ -75,7 +128,7 @@ export class CalendarService {
       userId,
       googleEventId: event.id,
       title: event.summary,
-      description: event.description,
+      description: this.stripHtmlTags(event.description),
       startTime: this.parseEventTime(event.start),
       endTime: this.parseEventTime(event.end),
       location: event.location,

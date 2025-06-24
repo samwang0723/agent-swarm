@@ -24,6 +24,7 @@ services:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - DB_HOST=db
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
       - GOOGLE_API_KEY=
       - OPENAI_API_KEY=
       - GOOGLE_ASSISTANT_MCP_URL=http://google-assistant:3003/mcp
@@ -77,6 +78,8 @@ services:
 
   google-assistant:
     image: mcp/google-assistant:latest
+    environment:
+      - SKIP_SSL_VERIFICATION=true
     ports:
       - '3003:3003'
     networks:

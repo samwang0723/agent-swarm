@@ -10,6 +10,15 @@ export interface LoggableEvent {
   toolCalls?: ToolCall<string, unknown>[];
   toolResults?: ToolResult<string, unknown, unknown>[];
 }
+export interface TimeRange {
+  from: string;
+  to: string;
+}
+export interface ClientLocation {
+  timezone: string;
+  country?: string;
+  city?: string;
+}
 export interface OutputStrategy {
   onStart?: (data: { sessionId: string; streaming: boolean }) => void;
   onChunk: (text: string, accumulated: string) => void;

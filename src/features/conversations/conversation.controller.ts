@@ -241,12 +241,26 @@ app.post('/stream', requireAuth, async c => {
     return c.json({ error: 'Message is required and must be a string' }, 400);
   }
 
+  // Extract request headers for timezone detection
+  const requestHeaders: Record<string, string | string[] | undefined> = {};
+  for (const [key, value] of Object.entries(c.req.header())) {
+    requestHeaders[key.toLowerCase()] = value;
+  }
+
+  // Debug logging to see what headers we're receiving
+  logger.info('=== REQUEST HEADERS DEBUG ===');
+  logger.info('All headers:', JSON.stringify(requestHeaders, null, 2));
+  logger.info('X-Client-Timezone header:', requestHeaders['x-client-timezone']);
+  logger.info('X-Forwarded-For header:', requestHeaders['x-forwarded-for']);
+  logger.info('X-Real-IP header:', requestHeaders['x-real-ip']);
+  logger.info('============================');
+
   return streamSSE(c, async stream => {
     // Create SSE output strategy
     const sseOutput = new HonoSSEOutput(stream, user.id);
 
     try {
-      await sendMessage(user, model, message, sseOutput);
+      await sendMessage(user, model, message, sseOutput, requestHeaders);
     } catch (error) {
       logger.error('Error during streaming chat:', error);
       // The HonoSSEOutput's onError will be called from within sendMessage,
@@ -307,6 +321,12 @@ app.post('/', requireAuth, async c => {
     return c.json({ error: 'Message is required and must be a string' }, 400);
   }
 
+  // Extract request headers for timezone detection
+  const requestHeaders: Record<string, string | string[] | undefined> = {};
+  for (const [key, value] of Object.entries(c.req.header())) {
+    requestHeaders[key.toLowerCase()] = value;
+  }
+
   try {
     // Simple output strategy to collect the full response
     const collectOutput = new (class implements OutputStrategy {
@@ -323,7 +343,7 @@ app.post('/', requireAuth, async c => {
       }
     })();
 
-    await sendMessage(user, model, message, collectOutput);
+    await sendMessage(user, model, message, collectOutput, requestHeaders);
 
     return c.json({
       response: collectOutput.getFullText(),

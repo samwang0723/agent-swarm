@@ -1561,6 +1561,17 @@
         }
       }
 
+      // Function to get client timezone using browser API
+      function getClientTimezone() {
+        try {
+          // Use Intl.DateTimeFormat to get the timezone
+          return Intl.DateTimeFormat().resolvedOptions().timeZone;
+        } catch (error) {
+          console.warn('Failed to detect client timezone:', error);
+          return 'UTC';
+        }
+      }
+
       async function sendMessage() {
         if (isStreaming) return;
 
@@ -1594,10 +1605,16 @@
           // Create streaming message placeholder
           const streamingDiv = addMessage('', false, true);
 
+          // Get client timezone
+          const clientTimezone = getClientTimezone();
+
           // Start streaming
           const response = await fetch('/api/v1/chat/stream', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'X-Client-Timezone': clientTimezone // Send timezone as custom header
+            },
             credentials: 'include',
             body: JSON.stringify({ message }),
           });

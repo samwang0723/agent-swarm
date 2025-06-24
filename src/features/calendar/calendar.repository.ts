@@ -54,3 +54,48 @@ export const insertCalendarEvents = async (
   const result = await query(text, formattedValues);
   return result.rows as { id: string; google_event_id: string }[];
 };
+
+export const getCalendarEventsByTimeRange = async (
+  userId: string,
+  userEmail: string,
+  fromTime: string,
+  toTime: string,
+  limit: number = 10
+): Promise<
+  { title: string; description: string; start_time: string; end_time: string }[]
+> => {
+  const text = `
+    SELECT 
+      title,
+      description,
+      start_time,
+      end_time
+    FROM calendar_events 
+    WHERE user_id = $1 
+      AND start_time >= $2::timestamptz 
+      AND end_time <= $3::timestamptz
+      AND attendees IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 
+        FROM jsonb_array_elements(attendees) as attendee
+        WHERE attendee->>'email' = $4 
+          AND attendee->>'responseStatus' = 'declined'
+      )
+    ORDER BY start_time ASC
+    LIMIT $5
+  `;
+
+  const result = await query(text, [
+    userId,
+    fromTime,
+    toTime,
+    userEmail,
+    limit,
+  ]);
+  return result.rows as {
+    title: string;
+    description: string;
+    start_time: string;
+    end_time: string;
+  }[];
+};

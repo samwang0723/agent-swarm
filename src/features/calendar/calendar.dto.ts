@@ -24,7 +24,19 @@ export interface GoogleCalendarEvent {
   status: string;
 }
 
-export interface GoogleCalendarListResponse {
+export interface GoogleCalendarInfo {
+  id: string;
+  summary: string;
+  description?: string;
+  timeZone?: string;
+}
+
+export interface GoogleCalendarsResponse {
+  response: GoogleCalendarInfo[];
+  calendarsType?: string;
+}
+
+export interface GoogleCalendarListEventsResponse {
   events: GoogleCalendarEvent[];
 }
 

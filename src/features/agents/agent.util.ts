@@ -83,8 +83,12 @@ export function convertMultiServerToAgentTools(
 
     // Add server prefix to avoid naming conflicts
     for (const [toolName, toolConfig] of Object.entries(convertedTools)) {
-      const prefixedName = `${serverName}_${toolName}`;
-      combinedTools[prefixedName] = {
+      if (combinedTools[toolName]) {
+        logger.warn(
+          `Tool name collision: The tool '${toolName}' from server '${serverName}' is overwriting a previously registered tool with the same name.`
+        );
+      }
+      combinedTools[toolName] = {
         ...toolConfig,
         description: `[${serverName}] ${toolConfig.description}`,
       };

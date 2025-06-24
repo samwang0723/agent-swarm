@@ -266,11 +266,34 @@ app.get('/google/callback', async c => {
       email: userInfo.email,
       name: userInfo.name,
     });
+
+    // Store/update the integration with the new tokens
     await userService.upsertGoogleIntegration(user.id, {
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expiry_date: tokens.expiry_date,
     });
+
+    // If Google didn't provide a refresh token this time, fetch the existing one from the database
+    let refreshToken = tokens.refresh_token;
+    if (!refreshToken) {
+      logger.warn(
+        'No refresh token from Google, attempting to fetch from database...'
+      );
+      try {
+        const existingIntegration = await userService.getGoogleIntegration(
+          user.id
+        );
+        if (existingIntegration?.refresh_token) {
+          refreshToken = existingIntegration.refresh_token;
+          logger.info('Successfully retrieved refresh token from database');
+        } else {
+          logger.warn('No refresh token found in database either');
+        }
+      } catch (error) {
+        logger.error('Failed to fetch refresh token from database:', error);
+      }
+    }
 
     const sessionToken = generateSessionToken();
     const sessionId = `sid_${randomUUID()}`;
@@ -281,7 +304,7 @@ app.get('/google/callback', async c => {
       picture: userInfo.picture || '',
       sessionId,
       accessToken: tokens.access_token || undefined,
-      refreshToken: tokens.refresh_token || undefined,
+      refreshToken: refreshToken || undefined,
       tokenExpiryDate: tokens.expiry_date || undefined,
       createdAt: new Date(),
     };

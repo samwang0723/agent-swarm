@@ -44,7 +44,7 @@ export class EmbeddingService {
     sourceType: string,
     sourceIdExtractor: (item: T) => string
   ): Promise<void> {
-    const BATCH_SIZE = 20;
+    const BATCH_SIZE = 10;
     const batches = [];
 
     // Split items into batches of 10
@@ -76,7 +76,7 @@ export class EmbeddingService {
 
         // Sleep for 1 second between batches if there are more batches to process
         if (batchIndex < batches.length - 1) {
-          await this.sleep(1000);
+          await this.sleep(500);
         }
       } catch (error) {
         console.error(

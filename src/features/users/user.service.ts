@@ -35,6 +35,12 @@ export class UserService {
     );
   }
 
+  public async getGoogleIntegration(
+    userId: string
+  ): Promise<userRepo.Integration | null> {
+    return userRepo.getIntegrationByProvider(userId, 'google');
+  }
+
   public async updateLastLogin(userId: string): Promise<void> {
     await userRepo.updateUserLastLogin(userId);
   }

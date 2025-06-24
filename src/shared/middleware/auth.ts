@@ -6,6 +6,7 @@ import { AgentFactory } from '@/features/agents/agent.factory';
 import { createAuthError } from '@/shared/utils/api-error';
 import { ErrorCodes } from '@/shared/utils/error-code';
 import { SessionService } from '@/features/users/user.service';
+import { UserService } from '@/features/users/user.service';
 import {
   syncCalendarTask,
   syncGmailTask,
@@ -78,8 +79,35 @@ export const refreshAccessTokenIfNeeded = async (
     return;
   }
 
-  if (!userSession.refreshToken) {
-    logger.warn('Access token expired, but no refresh token available.');
+  let refreshToken = userSession.refreshToken;
+
+  // If no refresh token in session, try to get it from the database
+  if (!refreshToken) {
+    logger.warn(
+      'No refresh token in session, attempting to fetch from database...'
+    );
+    try {
+      const userService = new UserService();
+      const integration = await userService.getGoogleIntegration(
+        userSession.id
+      );
+      if (integration?.refresh_token) {
+        refreshToken = integration.refresh_token;
+        logger.info('Successfully retrieved refresh token from database');
+
+        // Update the session with the refresh token for future use
+        userSession.refreshToken = refreshToken;
+        await sessionService.updateSession(token, userSession);
+      }
+    } catch (error) {
+      logger.error('Failed to fetch refresh token from database:', error);
+    }
+  }
+
+  if (!refreshToken) {
+    logger.warn(
+      'Access token expired, but no refresh token available in session or database.'
+    );
     await removeUserSession(token);
     throw createAuthError(
       ErrorCodes.REFRESH_TOKEN_ERROR,
@@ -94,7 +122,7 @@ export const refreshAccessTokenIfNeeded = async (
       process.env.GOOGLE_REDIRECT_URI
     );
     client.setCredentials({
-      refresh_token: userSession.refreshToken,
+      refresh_token: refreshToken,
     });
 
     logger.info(

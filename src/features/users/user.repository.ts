@@ -109,6 +109,17 @@ export const upsertIntegration = async (
   return rows[0];
 };
 
+export const getIntegrationByProvider = async (
+  userId: string,
+  provider: string
+): Promise<Integration | null> => {
+  const result = await query<Integration>(
+    'SELECT * FROM integrations WHERE user_id = $1 AND provider = $2',
+    [userId, provider]
+  );
+  return result.rows.length > 0 ? result.rows[0] : null;
+};
+
 export const updateUserLastLogin = async (userId: string): Promise<User> => {
   const { rows } = await query<User>(
     'UPDATE users SET last_login_at = NOW() WHERE id = $1 RETURNING *',

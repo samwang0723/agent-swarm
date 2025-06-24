@@ -248,12 +248,15 @@ app.post('/stream', requireAuth, async c => {
   }
 
   // Debug logging to see what headers we're receiving
-  logger.info('=== REQUEST HEADERS DEBUG ===');
-  logger.info('All headers:', JSON.stringify(requestHeaders, null, 2));
-  logger.info('X-Client-Timezone header:', requestHeaders['x-client-timezone']);
-  logger.info('X-Forwarded-For header:', requestHeaders['x-forwarded-for']);
-  logger.info('X-Real-IP header:', requestHeaders['x-real-ip']);
-  logger.info('============================');
+  logger.debug('=== REQUEST HEADERS DEBUG ===');
+  logger.debug('All headers:', JSON.stringify(requestHeaders, null, 2));
+  logger.debug(
+    'X-Client-Timezone header:',
+    requestHeaders['x-client-timezone']
+  );
+  logger.debug('X-Forwarded-For header:', requestHeaders['x-forwarded-for']);
+  logger.debug('X-Real-IP header:', requestHeaders['x-real-ip']);
+  logger.debug('============================');
 
   return streamSSE(c, async stream => {
     // Create SSE output strategy

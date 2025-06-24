@@ -265,7 +265,7 @@ export async function sendMessage(
     }
   }
 
-  logger.info(`Augmented message: ${augmentedMessage}`);
+  logger.debug(`Augmented message: ${augmentedMessage}`);
 
   // Add user message to history and get current history
   messageHistory.addUserMessage(session.id, augmentedMessage);

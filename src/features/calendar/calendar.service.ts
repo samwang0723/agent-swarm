@@ -37,17 +37,16 @@ export class CalendarService {
     }
 
     const today = new Date();
-    const dayOfWeek = today.getDay(); // Sunday = 0, Monday = 1, etc.
-
-    const startOfWeek = new Date(
+    // Set to start of today (00:00:00)
+    const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
-      today.getDate() - dayOfWeek
+      today.getDate()
     );
 
-    const endOfNextWeek = new Date(startOfWeek);
-    endOfNextWeek.setDate(endOfNextWeek.getDate() + 14); // Two weeks from start of week
-    endOfNextWeek.setMilliseconds(-1); // End of the day before
+    const endOfTwoWeeks = new Date(startOfToday);
+    endOfTwoWeeks.setDate(endOfTwoWeeks.getDate() + 14); // Two weeks from today
+    endOfTwoWeeks.setMilliseconds(-1); // End of the day before
 
     const listCalendarsResponse = (await this.client.callTool(
       'gcalendar_list_calendars',
@@ -70,8 +69,8 @@ export class CalendarService {
 
     const response = (await this.client.callTool('gcalendar_list_events', {
       calendarId: primaryCalendar?.id || 'primary',
-      timeMin: startOfWeek.toISOString(),
-      timeMax: endOfNextWeek.toISOString(),
+      timeMin: startOfToday.toISOString(),
+      timeMax: endOfTwoWeeks.toISOString(),
       maxResults: 30,
     })) as GoogleCalendarListEventsResponse;
 

@@ -71,13 +71,23 @@ export const refreshAccessTokenIfNeeded = async (
   token: string,
   userSession: Session
 ): Promise<void> => {
+  // Check if access token exists and if it's expired
+  const hasAccessToken = !!userSession.accessToken;
   const isTokenExpired = userSession.tokenExpiryDate
     ? Date.now() > userSession.tokenExpiryDate - 5 * 60 * 1000 // 5-minute buffer
-    : false;
+    : !hasAccessToken; // If no expiry date but has token, assume valid; if no token, assume expired
+
+  logger.debug(
+    `Token refresh check - hasAccessToken: ${hasAccessToken}, isTokenExpired: ${isTokenExpired}, expiryDate: ${userSession.tokenExpiryDate ? new Date(userSession.tokenExpiryDate).toISOString() : 'none'}`
+  );
 
   if (!isTokenExpired) {
     return;
   }
+
+  logger.info(
+    `Access token expired or missing, attempting refresh for user ${userSession.id}`
+  );
 
   let refreshToken = userSession.refreshToken;
 
@@ -105,8 +115,8 @@ export const refreshAccessTokenIfNeeded = async (
   }
 
   if (!refreshToken) {
-    logger.warn(
-      'Access token expired, but no refresh token available in session or database.'
+    logger.error(
+      `Access token expired, but no refresh token available in session or database for user ${userSession.id}`
     );
     await removeUserSession(token);
     throw createAuthError(
@@ -126,29 +136,59 @@ export const refreshAccessTokenIfNeeded = async (
     });
 
     logger.info(
-      'Access token expired, attempting to refresh in refreshAccessTokenIfNeeded...'
+      `Attempting to refresh access token for user ${userSession.id}...`
     );
     const { credentials } = await client.refreshAccessToken();
-    logger.info('Access token refreshed successfully');
+
+    if (!credentials.access_token) {
+      throw new Error('No access token returned from refresh request');
+    }
+
+    logger.info(
+      `Access token refreshed successfully for user ${userSession.id}`
+    );
 
     // Update session with new token info
-    userSession.accessToken = credentials.access_token || undefined;
+    userSession.accessToken = credentials.access_token;
     userSession.tokenExpiryDate =
       typeof credentials.expiry_date === 'number'
         ? credentials.expiry_date
-        : undefined;
+        : Date.now() + 60 * 60 * 1000; // Default to 1 hour if no expiry provided
+
+    // Update refresh token if a new one was provided
+    if (credentials.refresh_token) {
+      userSession.refreshToken = credentials.refresh_token;
+    }
 
     // The session key (token) remains the same, but the session data is updated.
     await sessionService.updateSession(token, userSession);
+    logger.debug(
+      `Session updated with new access token for user ${userSession.id}`
+    );
 
     // Update agent factory with new access token
-    if (userSession.accessToken) {
-      AgentFactory.getInstance().updateAccessToken(userSession.accessToken);
-      await syncGmailTask(userSession.accessToken, userSession.id);
-      await syncCalendarTask(userSession.accessToken, userSession.id);
-    }
+    AgentFactory.getInstance().updateAccessToken(userSession.accessToken);
+
+    // Sync data with new token in background (don't block the request)
+    setImmediate(async () => {
+      try {
+        await Promise.all([
+          syncGmailTask(userSession.accessToken!, userSession.id),
+          syncCalendarTask(userSession.accessToken!, userSession.id),
+        ]);
+        logger.debug(`Background sync completed for user ${userSession.id}`);
+      } catch (syncError) {
+        logger.error(
+          `Background sync failed for user ${userSession.id}:`,
+          syncError
+        );
+      }
+    });
   } catch (error) {
-    logger.error('Failed to refresh access token:', error);
+    logger.error(
+      `Failed to refresh access token for user ${userSession.id}:`,
+      error
+    );
     // If refresh fails, the user needs to re-authenticate.
     await removeUserSession(token);
     throw createAuthError(
@@ -163,27 +203,76 @@ export const refreshAccessTokenIfNeeded = async (
  */
 export const requireAuth = async (c: Context, next: Next): Promise<void> => {
   let token: string | undefined;
+  let tokenSource: 'header' | 'cookie' | 'none' = 'none';
 
+  // Extract token from Authorization header or cookie
   const authHeader = c.req.header('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
+    tokenSource = 'header';
   } else {
     token = getCookie(c, 'auth_token');
+    if (token) {
+      tokenSource = 'cookie';
+    }
   }
 
+  logger.debug(
+    `Auth check - token source: ${tokenSource}, token present: ${!!token}`
+  );
+
   if (!token) {
+    logger.warn('Authentication required: No token provided');
     throw createAuthError(ErrorCodes.AUTH_REQUIRED);
   }
 
-  const userSession = await getUserSession(token);
-
-  if (!userSession) {
+  let userSession: Session | null;
+  try {
+    userSession = await getUserSession(token);
+  } catch (error) {
+    logger.error('Failed to retrieve user session:', error);
     throw createAuthError(ErrorCodes.INVALID_TOKEN);
   }
 
-  await refreshAccessTokenIfNeeded(token, userSession);
+  if (!userSession) {
+    logger.warn(
+      `Invalid token: Session not found for token from ${tokenSource}`
+    );
+    throw createAuthError(ErrorCodes.INVALID_TOKEN);
+  }
 
-  c.set('user', userSession);
+  logger.debug(
+    `User session found for ${userSession.email} (${userSession.id})`
+  );
+
+  try {
+    // Refresh access token if needed (this will update the session if refreshed)
+    await refreshAccessTokenIfNeeded(token, userSession);
+
+    // Get the potentially updated session after refresh
+    const updatedSession = await getUserSession(token);
+    if (!updatedSession) {
+      logger.error('Session was removed during token refresh');
+      throw createAuthError(ErrorCodes.INVALID_TOKEN);
+    }
+
+    c.set('user', updatedSession);
+    logger.debug(`Authentication successful for user ${updatedSession.email}`);
+  } catch (error) {
+    logger.error(`Token refresh failed for user ${userSession.email}:`, error);
+
+    // If it's already an auth error, just re-throw it
+    if (error && typeof error === 'object' && 'code' in error) {
+      throw error;
+    }
+
+    // Otherwise, wrap it in a generic auth error
+    throw createAuthError(
+      ErrorCodes.REFRESH_TOKEN_ERROR,
+      'Authentication failed, please log in again.'
+    );
+  }
+
   await next();
 };
 

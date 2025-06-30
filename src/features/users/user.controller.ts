@@ -740,6 +740,24 @@ app.post('/oauth/token', async c => {
 
     await storeUserSession(sessionToken, session);
 
+    // Sync data with new token in background (don't block the request)
+    setImmediate(async () => {
+      try {
+        if (session.accessToken) {
+          await Promise.all([
+            syncGmailTask(session.accessToken, session.id),
+            syncCalendarTask(session.accessToken, session.id),
+          ]);
+          logger.debug(`Background sync completed for user ${session.id}`);
+        }
+      } catch (syncError) {
+        logger.error(
+          `Background sync failed for user ${session.id}:`,
+          syncError
+        );
+      }
+    });
+
     // Clean up authorization code
     await deleteAuthCode(code);
 

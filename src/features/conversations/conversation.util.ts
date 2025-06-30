@@ -113,6 +113,33 @@ export const detectClientTimezone = async (
   return 'UTC';
 };
 
+// Helper function to extract client datetime from request headers
+export const extractClientDateTime = (
+  headers: Record<string, string | string[] | undefined>
+): string | null => {
+  const clientDateTimeHeader = headers['x-client-datetime'];
+  if (clientDateTimeHeader) {
+    const datetime = Array.isArray(clientDateTimeHeader)
+      ? clientDateTimeHeader[0]
+      : clientDateTimeHeader;
+
+    // Validate that it's a valid ISO datetime string
+    try {
+      const parsedDate = new Date(datetime);
+      if (!isNaN(parsedDate.getTime())) {
+        logger.info(`Using client-provided datetime from header: ${datetime}`);
+        return datetime;
+      }
+    } catch (error) {
+      logger.warn(`Invalid datetime provided in header: ${datetime}`);
+    }
+  }
+
+  // Return null if no valid datetime found
+  logger.debug('No valid client datetime found in headers');
+  return null;
+};
+
 export const extractTimeRange = (
   message: string,
   timezone: string = 'UTC'

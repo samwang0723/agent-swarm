@@ -254,6 +254,10 @@ app.post('/stream', requireAuth, async c => {
     'X-Client-Timezone header:',
     requestHeaders['x-client-timezone']
   );
+  logger.debug(
+    'X-Client-Datetime header:',
+    requestHeaders['x-client-datetime']
+  );
   logger.debug('X-Forwarded-For header:', requestHeaders['x-forwarded-for']);
   logger.debug('X-Real-IP header:', requestHeaders['x-real-ip']);
   logger.debug('============================');

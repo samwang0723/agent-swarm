@@ -27,6 +27,8 @@ app.use(
       'Content-Type',
       'Accept',
       'Authorization',
+      'X-Client-Timezone',
+      'X-Client-Datetime',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     credentials: true,

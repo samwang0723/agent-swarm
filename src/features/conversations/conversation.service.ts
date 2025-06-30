@@ -11,6 +11,7 @@ import {
   logToolInformation,
   extractTimeRange,
   detectClientTimezone,
+  extractClientDateTime,
 } from './conversation.util';
 
 const shouldSearchEmails = (message: string): boolean => {
@@ -82,6 +83,8 @@ async function handleRagStream(
     const result = streamText({
       model,
       messages: history,
+      // maxTokens: 500,
+      // temperature: 0.7,
     });
 
     const finalText = await readTextStream(result.textStream, outputStrategy);
@@ -175,15 +178,32 @@ export async function sendMessage(
   let augmentedMessage = message;
   let ragApplied = false;
 
-  // Detect client timezone if headers are provided
+  // Detect client timezone and datetime if headers are provided
   let clientTimezone = 'UTC';
+  let clientDateTime: string | null = null;
   if (requestHeaders) {
     try {
       clientTimezone = await detectClientTimezone(requestHeaders);
+      clientDateTime = extractClientDateTime(requestHeaders);
     } catch (error) {
       logger.warn('Failed to detect client timezone:', error);
       // Continue with UTC as fallback
     }
+  }
+
+  // Append current datetime information if available
+  if (clientDateTime) {
+    const formattedDateTime = new Date(clientDateTime).toLocaleString('en-US', {
+      timeZone: clientTimezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    });
+    augmentedMessage = `${message}\n\n[Current datetime: ${formattedDateTime}]`;
   }
 
   // Check for time-sensitive messages and extract date range with timezone
@@ -197,8 +217,8 @@ export async function sendMessage(
       originalMessage: message,
     });
 
-    // Augment message with time range information
-    augmentedMessage = `${message}\n\n[Time Range Context: ${timeRange.from} to ${timeRange.to}, Timezone: ${clientTimezone}]`;
+    // Augment message with time range information (append to existing augmentation)
+    augmentedMessage = `${augmentedMessage}\n\n[Query Time Range: ${timeRange.from} to ${timeRange.to}, Timezone: ${clientTimezone}]`;
   }
 
   // RAG: Retrieve context from embeddings if intent is matched

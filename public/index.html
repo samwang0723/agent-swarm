@@ -1047,9 +1047,8 @@
       async function logout() {
         try {
           updateStatus('Logging out...', 'info');
-          const response = await fetch('/api/v1/auth/logout', {
+          const response = await apiCall('/api/v1/auth/logout', {
             method: 'POST',
-            credentials: 'include',
           });
 
           if (response.ok) {
@@ -1073,9 +1072,7 @@
       async function checkAuthStatus() {
         try {
           console.log('=== AUTH CHECK DEBUG ===');
-          const response = await fetch('/api/v1/auth/me', {
-            credentials: 'include',
-          });
+          const response = await apiCall('/api/v1/auth/me');
 
           console.log('Auth response status:', response.status);
           console.log('Auth response ok:', response.ok);
@@ -1546,9 +1543,8 @@
         if (!isAuthenticated()) return;
         try {
           console.log('Pre-warming the agent swarm...');
-          const response = await fetch('/api/v1/chat/init', {
+          const response = await apiCall('/api/v1/chat/init', {
             method: 'POST',
-            credentials: 'include',
           });
 
           if (response.ok) {
@@ -1570,6 +1566,36 @@
           console.warn('Failed to detect client timezone:', error);
           return 'UTC';
         }
+      }
+
+      // Function to get current client datetime in ISO format
+      function getClientDateTime() {
+        try {
+          return new Date().toISOString();
+        } catch (error) {
+          console.warn('Failed to get client datetime:', error);
+          return new Date().toISOString();
+        }
+      }
+
+      // Utility function to make API calls with consistent headers
+      async function apiCall(url, options = {}) {
+        const defaultHeaders = {
+          'Content-Type': 'application/json',
+          'X-Client-Timezone': getClientTimezone(),
+          'X-Client-Datetime': getClientDateTime(),
+        };
+
+        const mergedOptions = {
+          credentials: 'include',
+          ...options,
+          headers: {
+            ...defaultHeaders,
+            ...(options.headers || {}),
+          },
+        };
+
+        return fetch(url, mergedOptions);
       }
 
       async function sendMessage() {
@@ -1605,17 +1631,9 @@
           // Create streaming message placeholder
           const streamingDiv = addMessage('', false, true);
 
-          // Get client timezone
-          const clientTimezone = getClientTimezone();
-
-          // Start streaming
-          const response = await fetch('/api/v1/chat/stream', {
+          // Start streaming using the utility function
+          const response = await apiCall('/api/v1/chat/stream', {
             method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'X-Client-Timezone': clientTimezone // Send timezone as custom header
-            },
-            credentials: 'include',
             body: JSON.stringify({ message }),
           });
 
@@ -1728,9 +1746,7 @@
         }
 
         try {
-          const response = await fetch('/api/v1/chat/history', {
-            credentials: 'include',
-          });
+          const response = await apiCall('/api/v1/chat/history');
 
           if (!response.ok) {
             await handleAuthError(response);
@@ -1788,9 +1804,8 @@
         }
 
         try {
-          const response = await fetch('/api/v1/chat/history', {
+          const response = await apiCall('/api/v1/chat/history', {
             method: 'DELETE',
-            credentials: 'include',
           });
 
           if (!response.ok) {

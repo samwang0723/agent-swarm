@@ -97,3 +97,6 @@ jspm_packages/
 
 # TernJS port file
 .tern-port
+
+# ngrok configuration (contains sensitive tokens)
+ngrok.yml

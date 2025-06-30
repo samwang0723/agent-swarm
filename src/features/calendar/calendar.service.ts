@@ -71,14 +71,14 @@ export class CalendarService {
       calendarId: primaryCalendar?.id || 'primary',
       timeMin: startOfToday.toISOString(),
       timeMax: endOfTwoWeeks.toISOString(),
-      maxResults: 30,
+      maxResults: 20,
     })) as GoogleCalendarListEventsResponse;
 
     // Process the response to strip HTML tags from event descriptions
     if (response.events && Array.isArray(response.events)) {
       response.events = response.events.map((event: GoogleCalendarEvent) => ({
         ...event,
-        description: this.stripHtmlTags(event.description)?.slice(0, 300),
+        description: this.stripHtmlTags(event.description)?.slice(0, 200),
       }));
     }
 

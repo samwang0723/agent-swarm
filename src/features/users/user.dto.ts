@@ -3,6 +3,7 @@ import { Session } from '@/shared/middleware/auth';
 export interface GoogleUserInfo {
   email?: string | null;
   name?: string | null;
+  picture?: string | null;
 }
 
 export interface GoogleTokens {

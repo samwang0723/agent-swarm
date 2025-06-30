@@ -13,18 +13,23 @@ A powerful AI Agent Swarm application built with TypeScript and Hono, featuring 
 - **👑 Queen Agent Pattern**: Business logic agent that routes to specialized worker agents
 - **🔌 MCP Tool Integration**: Extensible Model Context Protocol support for external services
 - **🔐 Google OAuth Authentication**: Secure authentication with Google account integration and Gmail API access
-- **🌐 RESTful API Server**: User-based API with streaming and non-streaming endpoints, built with Hono
-- **📚 Message History**: Persistent conversation history per authenticated user with tool call tracking
-- **🎯 Unified Output Strategies**: Strategy pattern supporting SSE streaming and collected outputs
-- **⚡ Real-time Streaming**: Live AI response streaming with Server-Sent Events
-- **⏳ Temporal Workflows**: Robust, scalable, and reliable workflow and activity management for asynchronous tasks.
-- **🍽️ Restaurant Booking**: Built-in restaurant search and booking capabilities
-- **📊 Interactive Web Interface**: Built-in web interface for easy testing and interaction
-- **🔧 TypeScript**: Full type safety and modern development experience
-- **📈 Extensible Architecture**: Easy to add new agents and MCP tools
-- **⚙️ Configuration-Driven**: NEW! Declarative agent setup - add agents without code changes
-- **🛡️ Auto-Validation**: NEW! Comprehensive configuration validation with detailed error messages
-- **🔄 Smart Routing**: NEW! Automatic handover tool generation based on keywords
+- 📧 **Gmail Integration**: Access and manage Gmail data
+- 📅 **Calendar Integration**: Sync and manage Google Calendar events
+- 🌐 **RESTful API Server**: User-based API with streaming and non-streaming endpoints, built with Hono
+- 🔄 **OAuth API Server**: Use as OAuth provider for upstream applications
+- 📚 Message History\*\*: Persistent conversation history per authenticated user with tool call tracking
+- 🎯 Unified Output Strategies\*\*: Strategy pattern supporting SSE streaming and collected outputs
+- ⚡ Real-time Streaming\*\*: Live AI response streaming with Server-Sent Events
+- ⏳ Temporal Workflows\*\*: Robust, scalable, and reliable workflow and activity management for asynchronous tasks.
+- 🍽️ Restaurant Booking\*\*: Built-in restaurant search and booking capabilities
+- 📊 Interactive Web Interface\*\*: Built-in web interface for easy testing and interaction
+- 🔧 TypeScript\*\*: Full type safety and modern development experience
+- 📈 Extensible Architecture\*\*: Easy to add new agents and MCP tools
+- ⚙️ Configuration-Driven\*\*: NEW! Declarative agent setup - add agents without code changes
+- 🛡️ Auto-Validation\*\*: NEW! Comprehensive configuration validation with detailed error messages
+- 🔄 Smart Routing\*\*: NEW! Automatic handover tool generation based on keywords
+- ⚡ **Real-time Processing**: Background job processing with Temporal
+- 🗄️ **PostgreSQL Database**: Robust data persistence
 
 ## 🚀 Getting Started
 
@@ -37,6 +42,7 @@ To get the Agent Swarm running locally, follow these steps.
 - Docker and Docker Compose
 - Anthropic API key
 - Google Cloud Console project with OAuth 2.0 credentials
+- PostgreSQL
 
 ### 1. Installation
 
@@ -898,3 +904,63 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 ⭐ **Star this repository if you find it helpful!**
+
+## OAuth API Server
+
+Your Agent Swarm server can function as a centralized OAuth provider for upstream applications:
+
+### New OAuth API Endpoints
+
+- `POST /api/v1/auth/oauth/initiate` - Start OAuth flow for upstream apps
+- `GET /api/v1/auth/oauth/callback` - Handle OAuth callback and redirect
+- `POST /api/v1/auth/oauth/token` - Exchange auth code for access token
+- `POST /api/v1/auth/oauth/validate` - Validate access tokens
+
+### Example Usage
+
+```javascript
+// 1. Initiate OAuth flow
+const response = await fetch('/api/v1/auth/oauth/initiate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    redirect_uri: 'https://your-app.com/callback',
+    state: 'csrf-protection-state',
+  }),
+});
+
+const { auth_url } = await response.json();
+window.location.href = auth_url;
+
+// 2. Exchange auth code for token (after callback)
+const tokenResponse = await fetch('/api/v1/auth/oauth/token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    grant_type: 'authorization_code',
+    code: authCodeFromCallback,
+  }),
+});
+
+const { access_token, user_info } = await tokenResponse.json();
+
+// 3. Use access token for authenticated requests
+const apiResponse = await fetch('/api/v1/conversations', {
+  headers: {
+    Authorization: `Bearer ${access_token}`,
+  },
+});
+```
+
+### Environment Setup
+
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Configure your environment variables
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/v1/auth/google/callback
+DATABASE_URL=postgresql://user:pass@localhost:5432/agent_swarm
+```

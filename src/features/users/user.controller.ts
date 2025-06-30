@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, Context } from 'hono';
 import { google } from 'googleapis';
 import crypto from 'crypto';
 import { randomUUID } from 'crypto';
@@ -8,11 +8,20 @@ import {
   removeUserSession,
   Session,
   requireAuth,
+  getUserSession,
 } from '@/shared/middleware/auth';
 import { createServerError } from '@/shared/utils/api-error';
 import { ErrorCodes } from '@/shared/utils/error-code';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import { UserService } from '@/features/users/user.service';
+import {
+  UserService,
+  storeOAuthState,
+  getOAuthState,
+  deleteOAuthState,
+  storeAuthCode,
+  getAuthCode,
+  deleteAuthCode,
+} from '@/features/users/user.service';
 import {
   syncCalendarTask,
   syncGmailTask,
@@ -43,6 +52,102 @@ const oauth2Client = new OAuth2(
  */
 const generateSessionToken = (): string => {
   return crypto.randomBytes(32).toString('hex');
+};
+
+/**
+ * Handle upstream OAuth callback
+ */
+const handleUpstreamOAuthCallback = async (
+  c: Context,
+  code: string,
+  state: string
+) => {
+  if (!code || !state) {
+    logger.error(
+      'Missing required parameters: code and state for upstream OAuth'
+    );
+    return c.redirect('/?auth=error&reason=missing_parameters');
+  }
+
+  // Retrieve the stored OAuth state
+  const oauthState = await getOAuthState(state);
+  if (!oauthState) {
+    logger.error('Invalid or expired OAuth state for upstream OAuth');
+    return c.redirect('/?auth=error&reason=invalid_state');
+  }
+
+  // Check if state has expired
+  if (Date.now() > oauthState.expires_at) {
+    await deleteOAuthState(state);
+    logger.error('OAuth state has expired for upstream OAuth');
+    return c.redirect('/?auth=error&reason=expired_state');
+  }
+
+  try {
+    // Exchange code for tokens using the existing OAuth2 client
+    const { tokens } = await oauth2Client.getToken(code);
+
+    // Get user info
+    const callbackOAuth2Client = new OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+    callbackOAuth2Client.setCredentials(tokens);
+
+    const oauth2 = google.oauth2({
+      version: 'v2',
+      auth: callbackOAuth2Client,
+    });
+    const userResponse = await oauth2.userinfo.get();
+    const userInfo = userResponse.data;
+
+    // Store/update user and integration
+    const userService = new UserService();
+    const user = await userService.findOrCreateUser({
+      email: userInfo.email,
+      name: userInfo.name,
+    });
+
+    await userService.upsertGoogleIntegration(user.id, {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: tokens.expiry_date,
+    });
+
+    // Generate a secure authorization code for the upstream app
+    const authCode = crypto.randomBytes(32).toString('hex');
+    const authCodeData = {
+      user_id: user.id,
+      tokens,
+      user_info: userInfo,
+      created_at: Date.now(),
+      expires_at: Date.now() + 5 * 60 * 1000, // 5 minutes
+    };
+
+    // Store the authorization code
+    await storeAuthCode(authCode, authCodeData);
+
+    // Clean up OAuth state
+    await deleteOAuthState(state);
+
+    // Redirect to upstream application with authorization code
+    const redirectUrl = new URL(oauthState.redirect_uri);
+    redirectUrl.searchParams.set('code', authCode);
+    redirectUrl.searchParams.set('state', oauthState.state);
+
+    logger.info(`Redirecting upstream OAuth to: ${redirectUrl.toString()}`);
+    return c.redirect(redirectUrl.toString());
+  } catch (error) {
+    logger.error('Error in upstream OAuth callback:', error);
+
+    // Redirect to upstream app with error
+    const redirectUrl = new URL(oauthState.redirect_uri);
+    redirectUrl.searchParams.set('error', 'oauth_callback_failed');
+    redirectUrl.searchParams.set('state', oauthState.state);
+
+    return c.redirect(redirectUrl.toString());
+  }
 };
 
 /**
@@ -142,9 +247,19 @@ app.get('/google/callback', async c => {
 
   logger.info(`Callback received with: code: ${!!code} state: ${state}`);
 
-  if (state !== 'gmail-auth') {
-    logger.error('Invalid state parameter');
-    return c.redirect('/?auth=error&reason=invalid_state');
+  // Check if this is an upstream OAuth flow (state starts with 'oauth_state_')
+  const isUpstreamOAuth =
+    typeof state === 'string' && state.startsWith('oauth_state_');
+
+  if (isUpstreamOAuth) {
+    // Handle upstream OAuth flow
+    return handleUpstreamOAuthCallback(c, code as string, state as string);
+  } else {
+    // Handle direct browser OAuth flow
+    if (state !== 'gmail-auth') {
+      logger.error('Invalid state parameter');
+      return c.redirect('/?auth=error&reason=invalid_state');
+    }
   }
 
   if (!code) {
@@ -411,6 +526,342 @@ app.get('/me', requireAuth, async c => {
     sessionId: userSession.sessionId,
     createdAt: userSession.createdAt,
   });
+});
+
+/**
+ * @swagger
+ * /api/v1/auth/oauth/initiate:
+ *   post:
+ *     summary: Initiate OAuth for upstream applications
+ *     tags: [OAuth API]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               redirect_uri:
+ *                 type: string
+ *                 description: Upstream application's callback URL
+ *               state:
+ *                 type: string
+ *                 description: State parameter for CSRF protection
+ *               scopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Optional custom scopes
+ *             required:
+ *               - redirect_uri
+ *     responses:
+ *       200:
+ *         description: OAuth URL generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 auth_url:
+ *                   type: string
+ *                 state:
+ *                   type: string
+ *                 expires_at:
+ *                   type: string
+ *       400:
+ *         description: Invalid request
+ */
+app.post('/oauth/initiate', async c => {
+  const body = await c.req.json();
+  const { redirect_uri, state, scopes } = body;
+
+  if (!redirect_uri) {
+    throw createServerError(
+      ErrorCodes.VALIDATION_ERROR,
+      'redirect_uri is required'
+    );
+  }
+
+  // Validate redirect_uri format
+  try {
+    new URL(redirect_uri);
+  } catch {
+    throw createServerError(
+      ErrorCodes.VALIDATION_ERROR,
+      'Invalid redirect_uri format'
+    );
+  }
+
+  const defaultScopes = [
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/calendar',
+  ];
+
+  const requestedScopes = scopes || defaultScopes;
+  const internalState = state || crypto.randomBytes(16).toString('hex');
+
+  // Store the redirect URI and state for validation during callback
+  const oauthState = {
+    redirect_uri,
+    state: internalState,
+    created_at: Date.now(),
+    expires_at: Date.now() + 10 * 60 * 1000, // 10 minutes
+  };
+
+  // In production, use Redis or database for this
+  // For now, we'll use a simple in-memory store
+  const stateKey = `oauth_state_${crypto.randomBytes(16).toString('hex')}`;
+
+  // You'll need to implement a temporary state storage
+  await storeOAuthState(stateKey, oauthState);
+
+  try {
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      prompt: 'consent',
+      scope: requestedScopes,
+      state: stateKey, // Use our internal state key
+      include_granted_scopes: true,
+      response_type: 'code',
+    });
+
+    return c.json({
+      auth_url: authUrl,
+      state: internalState,
+      expires_at: new Date(oauthState.expires_at).toISOString(),
+    });
+  } catch (error) {
+    logger.error('Error generating OAuth URL for upstream app:', error);
+    throw createServerError(
+      ErrorCodes.AUTH_INIT_ERROR,
+      undefined,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/auth/oauth/token:
+ *   post:
+ *     summary: Exchange authorization code for access token
+ *     tags: [OAuth API]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: Authorization code from callback
+ *               grant_type:
+ *                 type: string
+ *                 enum: [authorization_code, refresh_token]
+ *               refresh_token:
+ *                 type: string
+ *                 description: Required when grant_type is refresh_token
+ *             required:
+ *               - grant_type
+ *     responses:
+ *       200:
+ *         description: Access token response
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 access_token:
+ *                   type: string
+ *                 token_type:
+ *                   type: string
+ *                 expires_in:
+ *                   type: number
+ *                 refresh_token:
+ *                   type: string
+ *                 user_id:
+ *                   type: string
+ *                 user_info:
+ *                   type: object
+ */
+app.post('/oauth/token', async c => {
+  const body = await c.req.json();
+  const { code, grant_type, refresh_token } = body;
+
+  if (!grant_type) {
+    throw createServerError(
+      ErrorCodes.VALIDATION_ERROR,
+      'grant_type is required'
+    );
+  }
+
+  if (grant_type === 'authorization_code') {
+    if (!code) {
+      throw createServerError(
+        ErrorCodes.VALIDATION_ERROR,
+        'code is required for authorization_code grant'
+      );
+    }
+
+    // Retrieve authorization code data
+    const authCodeData = await getAuthCode(code);
+    if (!authCodeData) {
+      throw createServerError(
+        ErrorCodes.INVALID_TOKEN,
+        'Invalid or expired authorization code'
+      );
+    }
+
+    // Check if code has expired
+    if (Date.now() > authCodeData.expires_at) {
+      await deleteAuthCode(code);
+      throw createServerError(
+        ErrorCodes.INVALID_TOKEN,
+        'Authorization code has expired'
+      );
+    }
+
+    // Generate session token for the upstream app
+    const sessionToken = generateSessionToken();
+    const session: Session = {
+      id: authCodeData.user_id,
+      email: authCodeData.user_info.email || '',
+      name: authCodeData.user_info.name || '',
+      picture: authCodeData.user_info.picture || '',
+      sessionId: `sid_${randomUUID()}`,
+      accessToken: authCodeData.tokens.access_token || undefined,
+      refreshToken: authCodeData.tokens.refresh_token || undefined,
+      tokenExpiryDate: authCodeData.tokens.expiry_date || undefined,
+      createdAt: new Date(),
+    };
+
+    await storeUserSession(sessionToken, session);
+
+    // Clean up authorization code
+    await deleteAuthCode(code);
+
+    const expiresIn = authCodeData.tokens.expiry_date
+      ? Math.max(
+          0,
+          Math.floor((authCodeData.tokens.expiry_date - Date.now()) / 1000)
+        )
+      : 3600;
+
+    return c.json({
+      access_token: sessionToken,
+      token_type: 'Bearer',
+      expires_in: expiresIn,
+      refresh_token: authCodeData.tokens.refresh_token || undefined,
+      user_id: authCodeData.user_id,
+      user_info: {
+        email: authCodeData.user_info.email,
+        name: authCodeData.user_info.name,
+        picture: authCodeData.user_info.picture,
+      },
+    });
+  } else if (grant_type === 'refresh_token') {
+    if (!refresh_token) {
+      throw createServerError(
+        ErrorCodes.VALIDATION_ERROR,
+        'refresh_token is required for refresh_token grant'
+      );
+    }
+
+    // Implement refresh token logic
+    // This would involve finding the user by refresh token and refreshing their Google tokens
+    // For brevity, this is simplified
+    throw createServerError(
+      ErrorCodes.VALIDATION_ERROR,
+      'Refresh token grant not yet implemented'
+    );
+  } else {
+    throw createServerError(
+      ErrorCodes.VALIDATION_ERROR,
+      'Unsupported grant_type'
+    );
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/auth/oauth/validate:
+ *   post:
+ *     summary: Validate access token
+ *     tags: [OAuth API]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               access_token:
+ *                 type: string
+ *             required:
+ *               - access_token
+ *     responses:
+ *       200:
+ *         description: Token validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 valid:
+ *                   type: boolean
+ *                 user_id:
+ *                   type: string
+ *                 user_info:
+ *                   type: object
+ *                 expires_at:
+ *                   type: string
+ */
+app.post('/oauth/validate', async c => {
+  const body = await c.req.json();
+  const { access_token } = body;
+
+  if (!access_token) {
+    throw createServerError(
+      ErrorCodes.VALIDATION_ERROR,
+      'access_token is required'
+    );
+  }
+
+  try {
+    const userSession = await getUserSession(access_token);
+
+    if (!userSession) {
+      return c.json({ valid: false });
+    }
+
+    // Check if token is expired
+    const isExpired = userSession.tokenExpiryDate
+      ? Date.now() > userSession.tokenExpiryDate
+      : false;
+
+    if (isExpired) {
+      return c.json({ valid: false, reason: 'Token expired' });
+    }
+
+    return c.json({
+      valid: true,
+      user_id: userSession.id,
+      user_info: {
+        email: userSession.email,
+        name: userSession.name,
+        picture: userSession.picture,
+      },
+      expires_at: userSession.tokenExpiryDate
+        ? new Date(userSession.tokenExpiryDate).toISOString()
+        : undefined,
+    });
+  } catch (error) {
+    logger.error('Error validating token:', error);
+    return c.json({ valid: false, reason: 'Validation error' });
+  }
 });
 
 export { app as authRouter };

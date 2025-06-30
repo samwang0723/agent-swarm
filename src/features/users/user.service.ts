@@ -2,6 +2,27 @@ import { Session } from '@/shared/middleware/auth';
 import { GoogleTokens, GoogleUserInfo } from './user.dto';
 import * as userRepo from './user.repository';
 
+// Interface definitions for OAuth flow
+interface OAuthState {
+  redirect_uri: string;
+  state: string;
+  created_at: number;
+  expires_at: number;
+}
+
+interface AuthCodeData {
+  user_id: string;
+  tokens: GoogleTokens;
+  user_info: GoogleUserInfo;
+  created_at: number;
+  expires_at: number;
+}
+
+// Temporary storage for OAuth state and auth codes
+// In production, use Redis or a database
+const oauthStateStore = new Map<string, OAuthState>();
+const authCodeStore = new Map<string, AuthCodeData>();
+
 export class UserService {
   public async findOrCreateUser(
     userInfo: GoogleUserInfo
@@ -51,35 +72,84 @@ export class UserService {
 }
 
 export class SessionService {
+  // Temporary storage for user sessions
+  // In production, use Redis or a database
+  private sessions = new Map<string, Session>();
+
   public async createSession(
     token: string,
     session: Session,
-    expiresInSeconds: number
+    expirationSeconds: number
   ): Promise<void> {
-    const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
-    await userRepo.createSession(token, session.id, session, expiresAt);
+    this.sessions.set(token, session);
+
+    // Set expiration
+    setTimeout(() => {
+      this.sessions.delete(token);
+    }, expirationSeconds * 1000);
   }
 
   public async getSession(token: string): Promise<Session | null> {
-    const storedSession = await userRepo.getSessionById(token);
-    if (!storedSession) {
-      return null;
-    }
-    // The 'data' column is already a parsed JSON object if using node-postgres
-    // but the query returns it as string if it was stringified before insert.
-    // The StoredSession interface says data is of type Session.
-    // Let's assume it's correctly parsed.
-    if (typeof storedSession.data === 'string') {
-      return JSON.parse(storedSession.data) as Session;
-    }
-    return storedSession.data;
-  }
-
-  public async deleteSession(token: string): Promise<void> {
-    await userRepo.deleteSessionById(token);
+    return this.sessions.get(token) || null;
   }
 
   public async updateSession(token: string, session: Session): Promise<void> {
-    await userRepo.updateSession(token, session);
+    this.sessions.set(token, session);
+  }
+
+  public async deleteSession(token: string): Promise<void> {
+    this.sessions.delete(token);
   }
 }
+
+// OAuth State Storage Functions
+export const storeOAuthState = async (
+  stateKey: string,
+  oauthState: OAuthState
+): Promise<void> => {
+  oauthStateStore.set(stateKey, oauthState);
+
+  // Set expiration
+  setTimeout(
+    () => {
+      oauthStateStore.delete(stateKey);
+    },
+    10 * 60 * 1000
+  ); // 10 minutes
+};
+
+export const getOAuthState = async (
+  stateKey: string
+): Promise<OAuthState | null> => {
+  return oauthStateStore.get(stateKey) || null;
+};
+
+export const deleteOAuthState = async (stateKey: string): Promise<void> => {
+  oauthStateStore.delete(stateKey);
+};
+
+// Auth Code Storage Functions
+export const storeAuthCode = async (
+  authCode: string,
+  authCodeData: AuthCodeData
+): Promise<void> => {
+  authCodeStore.set(authCode, authCodeData);
+
+  // Set expiration
+  setTimeout(
+    () => {
+      authCodeStore.delete(authCode);
+    },
+    5 * 60 * 1000
+  ); // 5 minutes
+};
+
+export const getAuthCode = async (
+  authCode: string
+): Promise<AuthCodeData | null> => {
+  return authCodeStore.get(authCode) || null;
+};
+
+export const deleteAuthCode = async (authCode: string): Promise<void> => {
+  authCodeStore.delete(authCode);
+};

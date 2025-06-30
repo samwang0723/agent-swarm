@@ -88,16 +88,17 @@ window.location.href = auth_url;
 
 ### 2. OAuth Callback Handler
 
-**Endpoint:** `GET /api/v1/auth/oauth/callback`
+**Endpoint:** `GET /api/v1/auth/google/callback` (existing Google OAuth callback)
 
 **Purpose:** Internal endpoint that handles Google's OAuth callback and redirects back to your app.
 
 **Flow:**
 
 1. Google redirects to this endpoint with `code` and `state`
-2. Agent Swarm exchanges code for tokens
-3. Agent Swarm stores user data and generates internal auth code
-4. Redirects to your app's `redirect_uri` with auth code
+2. Agent Swarm detects upstream OAuth flow (state starts with `oauth_state_`)
+3. Agent Swarm exchanges code for tokens
+4. Agent Swarm stores user data and generates internal auth code
+5. Redirects to your app's `redirect_uri` with auth code
 
 **Your callback will receive:**
 
@@ -212,7 +213,7 @@ if (!validation.valid) {
 ```tsx
 import React, { useState, useEffect } from 'react';
 
-const AGENT_SWARM_API = 'http://localhost:3000/api/v1';
+const AGENT_SWARM_API = 'http://localhost:8900/api/v1';
 
 export function OAuthIntegration() {
   const [user, setUser] = useState(null);
@@ -245,6 +246,12 @@ export function OAuthIntegration() {
         body: JSON.stringify({
           redirect_uri: window.location.origin + '/oauth-callback',
           state: 'react-app-state-' + Date.now(),
+          scopes: [
+            'https://www.googleapis.com/auth/gmail.readonly',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
+            'https://www.googleapis.com/auth/calendar',
+          ],
         }),
       });
 
@@ -362,7 +369,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 
 const app = express();
-const AGENT_SWARM_API = 'http://localhost:3000/api/v1';
+const AGENT_SWARM_API = 'http://localhost:8900/api/v1';
 
 app.use(express.json());
 
@@ -456,6 +463,7 @@ The Agent Swarm server should validate redirect URIs against a whitelist:
 // In production, implement redirect URI validation
 const allowedRedirectUris = [
   'https://your-app.com/oauth-callback',
+  'http://localhost:4000/oauth-demo.html', // Demo script
   'http://localhost:3000/oauth-callback', // Development only
 ];
 
@@ -500,9 +508,6 @@ const refreshToken = async refreshToken => {
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 GOOGLE_REDIRECT_URI=https://your-api.com/api/v1/auth/google/callback
-
-# For OAuth API endpoints
-OAUTH_CALLBACK_URI=https://your-api.com/api/v1/auth/oauth/callback
 ```
 
 ### Redis for Token Storage
@@ -548,6 +553,41 @@ const oauthLimiter = rateLimit({
 
 app.use('/api/v1/auth/oauth/', oauthLimiter);
 ```
+
+## Demo Script
+
+The repository includes a complete demo script (`script/oauth-flow-demo.sh`) that demonstrates the entire OAuth flow:
+
+```bash
+# Run the demo
+./script/oauth-flow-demo.sh
+
+# The demo will:
+# 1. Start a local test server (port 4000)
+# 2. Initiate OAuth flow with Agent Swarm API
+# 3. Open Google OAuth consent screen in browser
+# 4. Handle the callback and token exchange automatically
+# 5. Display all OAuth flow results in a web interface
+```
+
+**What the demo shows:**
+
+- Complete OAuth initiation request
+- Automatic code-to-token exchange
+- Token validation
+- User information display
+- Example of making authenticated API calls
+
+**Expected Flow:**
+
+1. Demo calls `POST /api/v1/auth/oauth/initiate`
+2. Browser opens Google OAuth consent screen
+3. User completes Google OAuth consent
+4. Google redirects to `/api/v1/auth/google/callback` (existing callback)
+5. Agent Swarm detects upstream OAuth flow (state starts with `oauth_state_`)
+6. Agent Swarm processes OAuth and redirects to demo server with auth code
+7. Demo server receives authorization code and exchanges it for access token
+8. Demo validates the token and displays results
 
 ## Testing
 

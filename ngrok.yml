@@ -1,9 +1,0 @@
-version: "2"
-authtoken: 2yRAOsXmmPahGg2wHw4Fa5DQEiM_3jDzAgZCYn7vimy67vjvv
-tunnels:
-  voice-agent:
-    addr: 3000
-    proto: http    
-  agent-swarm:
-    addr: 8900
-    proto: http

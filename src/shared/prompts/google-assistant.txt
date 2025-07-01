@@ -163,7 +163,7 @@ You can manage Google Calendar with the following tools.
 - `google-assistant_gcalendar_decline_event()`: Decline an event.
 
 ### Time Format
-When specifying a time range for listing events, you MUST use the ISO-8601 time format.
+When specifying a time range for listing events, you MUST use the ISO-8601 time format `2025-06-29T16:00:00Z`.
 - `timeMin`: Start of time range (e.g., `2023-12-25T00:00:00Z`)
 - `timeMax`: End of time range (e.g., `2023-12-25T23:59:59Z`)
 If not knowing the timezone, always checking with time tool

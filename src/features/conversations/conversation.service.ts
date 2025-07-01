@@ -13,35 +13,34 @@ import {
   detectClientTimezone,
   extractClientDateTime,
 } from './conversation.util';
+// Import intent detection services
+import { CompositeIntentDetector } from '@/shared/intent/compositeIntentDetector.service';
+import { PatternIntentDetector } from '@/shared/intent/patternIntentDetector.service';
+import { KeywordIntentDetector } from '@/shared/intent/keywordIntentDetector.service';
+import type { IToolIntentDetector } from '@/features/intent/intentDetector.service';
 
-const shouldSearchEmails = (message: string): boolean => {
-  const keywords = [
-    'email',
-    'mail',
-    'inbox',
-    'gmail',
-    'outlook',
-    'sender',
-    'recipient',
-    'subject',
-  ];
-  const lowerCaseMessage = message.toLowerCase();
-  return keywords.some(keyword => lowerCaseMessage.includes(keyword));
+// Create a singleton intent detector instance using composite pattern for best accuracy
+const createIntentDetector = (): IToolIntentDetector => {
+  const keywordDetector = new KeywordIntentDetector();
+  const patternDetector = new PatternIntentDetector();
+
+  // Use composite detector with weighted scoring
+  // Pattern detector gets higher weight (0.7) as it's more sophisticated
+  return new CompositeIntentDetector(
+    [patternDetector, keywordDetector],
+    [0.7, 0.3]
+  );
 };
 
-const shouldSearchCalendar = (message: string): boolean => {
-  const keywords = [
-    'calendar',
-    'event',
-    'meeting',
-    'schedule',
-    'appointment',
-    'agenda',
-    'when is my',
-    'what is on my',
-  ];
-  const lowerCaseMessage = message.toLowerCase();
-  return keywords.some(keyword => lowerCaseMessage.includes(keyword));
+// Global intent detector instance
+const intentDetector = createIntentDetector();
+
+// Helper function to check if a tool is detected in the intent result
+const isToolDetected = (
+  detectedTools: string[] | undefined,
+  toolName: string
+): boolean => {
+  return detectedTools ? detectedTools.includes(toolName) : false;
 };
 
 // Helper function to handle text streaming with efficient accumulation
@@ -222,65 +221,94 @@ export async function sendMessage(
   }
 
   // RAG: Retrieve context from embeddings if intent is matched
-  if (shouldSearchEmails(message)) {
-    const searchResults = await embeddingService.searchEmails(
-      session.id,
-      message
-    );
+  // 4. Detect tool intent from transcript
+  const intentDetectionStartTime = Date.now();
+  const intentResult = await intentDetector.detectToolIntent(message);
+  const intentDetectionDuration = Date.now() - intentDetectionStartTime;
+  logger.info(
+    `[${session.id}] Intent detection took ${intentDetectionDuration}ms.`
+  );
+  logger.debug(`[${session.id}] Tool intent detection result:`, {
+    requiresTools: intentResult.requiresTools,
+    detectedTools: intentResult.detectedTools,
+    confidence: intentResult.confidence,
+  });
 
-    if (searchResults && searchResults.length > 0) {
-      const context = searchResults.map(r => r.content).join('\n\n---\n\n');
-      augmentedMessage += `Based on the following context from emails, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
-      logger.info({
-        message: 'Augmented user message with email context.',
-        userId: session.id,
-        resultsCount: searchResults.length,
-      });
-      ragApplied = true;
-    }
-  } else if (shouldSearchCalendar(message)) {
-    // If timeRange is available, use direct database query
-    if (timeRange) {
-      const calendarResults = await getCalendarEventsByTimeRange(
-        session.id,
-        session.email,
-        timeRange.from,
-        timeRange.to,
-        10
-      );
-
-      if (calendarResults && calendarResults.length > 0) {
-        const context = calendarResults
-          .map(
-            r =>
-              `(${r.start_time} to ${r.end_time}) [${r.title}] ${r.description}`
-          )
-          .join('\n\n---\n\n');
-        augmentedMessage += `Based on the following context from your calendar events in the specified time range, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
-        logger.info({
-          message: 'Augmented user message with time-range calendar context.',
-          userId: session.id,
-          resultsCount: calendarResults.length,
-          timeRange: `${timeRange.from} to ${timeRange.to}`,
-        });
-        ragApplied = true;
-      }
-    } else {
-      // Fallback to embedding search when no time range is provided
-      const searchResults = await embeddingService.searchCalendarEvents(
+  // Use intent detection to determine which tools to use for RAG
+  if (intentResult.requiresTools && intentResult.detectedTools) {
+    // Check if email tool is detected
+    if (isToolDetected(intentResult.detectedTools, 'email')) {
+      const searchResults = await embeddingService.searchEmails(
         session.id,
         message
       );
 
       if (searchResults && searchResults.length > 0) {
         const context = searchResults.map(r => r.content).join('\n\n---\n\n');
-        augmentedMessage += `Based on the following context from your calendar, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+        augmentedMessage += `Based on the following context from emails, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
         logger.info({
-          message: 'Augmented user message with calendar context.',
+          message:
+            'Augmented user message with email context via intent detection.',
           userId: session.id,
           resultsCount: searchResults.length,
+          detectedTools: intentResult.detectedTools,
+          confidence: intentResult.confidence,
         });
         ragApplied = true;
+      }
+    }
+
+    // Check if calendar tool is detected
+    if (isToolDetected(intentResult.detectedTools, 'calendar')) {
+      // If timeRange is available, use direct database query
+      if (timeRange) {
+        const calendarResults = await getCalendarEventsByTimeRange(
+          session.id,
+          session.email,
+          timeRange.from,
+          timeRange.to,
+          10
+        );
+
+        if (calendarResults && calendarResults.length > 0) {
+          const context = calendarResults
+            .map(
+              r =>
+                `(${r.start_time} to ${r.end_time}) [${r.title}] ${r.description}`
+            )
+            .join('\n\n---\n\n');
+          augmentedMessage += `Based on the following context from your calendar events in the specified time range, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+          logger.info({
+            message:
+              'Augmented user message with time-range calendar context via intent detection.',
+            userId: session.id,
+            resultsCount: calendarResults.length,
+            timeRange: `${timeRange.from} to ${timeRange.to}`,
+            detectedTools: intentResult.detectedTools,
+            confidence: intentResult.confidence,
+          });
+          ragApplied = true;
+        }
+      } else {
+        // Fallback to embedding search when no time range is provided
+        const searchResults = await embeddingService.searchCalendarEvents(
+          session.id,
+          message
+        );
+
+        if (searchResults && searchResults.length > 0) {
+          const context = searchResults.map(r => r.content).join('\n\n---\n\n');
+          augmentedMessage += `Based on the following context from your calendar, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
+          logger.info({
+            message:
+              'Augmented user message with calendar context via intent detection.',
+            userId: session.id,
+            resultsCount: searchResults.length,
+            detectedTools: intentResult.detectedTools,
+            confidence: intentResult.confidence,
+          });
+          ragApplied = true;
+        }
       }
     }
   }

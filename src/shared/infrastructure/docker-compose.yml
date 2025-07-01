@@ -99,6 +99,13 @@ services:
     networks:
       - temporal-network
 
+  web-search:
+    image: mcp/brave:latest
+    ports:
+      - '3004:3004'
+    networks:
+      - temporal-network
+
 volumes:
   db_data:
 

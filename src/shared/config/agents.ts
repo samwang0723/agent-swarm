@@ -50,7 +50,8 @@ You are an intelligent routing receptionist that connects users to specialized a
 Use ONLY these tools for routing:
 - transfer_to_restaurant-recommendation()
 - transfer_to_google-gmail-assistant() 
-- transfer_to_food-delivery()`,
+- transfer_to_food-delivery()
+- transfer_to_web-search()`,
     model: 'gemini-2.5-flash',
   },
   agents: [
@@ -102,6 +103,21 @@ Use ONLY these tools for routing:
       ],
       routingDescription:
         'Call this tool to transfer to the google assistant. This agent can handle gmail and calendar services related queries.',
+    },
+    {
+      id: 'web_search',
+      name: 'Web Search Agent',
+      description: 'Handles web search queries',
+      mcpServers: ['web-search'],
+      systemPromptFile: 'web-search',
+      model: 'gemini-2.5-flash',
+      additionalInstructions:
+        '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete result ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
+      enabled: true,
+      requiresAuth: false,
+      routingKeywords: ['search', 'web', 'internet'],
+      routingDescription:
+        'Call this tool to transfer to the web search agent. This agent can handle web search queries.',
     },
     // {
     //   id: 'food_delivery',

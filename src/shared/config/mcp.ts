@@ -27,6 +27,14 @@ export const mcpServers: McpServerConfig[] = [
     enabled: process.env.GOOGLE_ASSISTANT_MCP_ENABLED !== 'false',
     requiresAuth: true,
   },
+  {
+    name: 'web-search',
+    url: process.env.WEB_SEARCH_MCP_URL || 'http://127.0.0.1:3004/mcp',
+    healthUrl:
+      process.env.WEB_SEARCH_MCP_HEALTH_URL || 'http://127.0.0.1:3004/health',
+    enabled: process.env.WEB_SEARCH_MCP_ENABLED !== 'false',
+    requiresAuth: false,
+  },
   // {
   //   name: 'browser',
   //   url: process.env.BROWSER_MCP_URL || 'http://localhost:3000/mcp',

@@ -35,6 +35,14 @@ export const mcpServers: McpServerConfig[] = [
     enabled: process.env.WEB_SEARCH_MCP_ENABLED !== 'false',
     requiresAuth: false,
   },
+  {
+    name: 'atlassian',
+    url: process.env.ALTASIAN_MCP_URL || 'http://127.0.0.1:3005/mcp',
+    healthUrl:
+      process.env.ALTASIAN_MCP_HEALTH_URL || 'http://127.0.0.1:3005/health',
+    enabled: process.env.ALTASIAN_MCP_ENABLED !== 'false',
+    requiresAuth: false,
+  },
   // {
   //   name: 'browser',
   //   url: process.env.BROWSER_MCP_URL || 'http://localhost:3000/mcp',

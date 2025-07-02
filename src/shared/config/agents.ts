@@ -119,6 +119,21 @@ Use ONLY these tools for routing:
       routingDescription:
         'Call this tool to transfer to the web search agent. This agent can handle web search queries.',
     },
+    {
+      id: 'atlassian',
+      name: 'Atlassian Agent',
+      description: 'Handles Atlassian queries',
+      mcpServers: ['atlassian'],
+      systemPromptFile: 'atlassian',
+      model: 'gemini-2.5-flash',
+      additionalInstructions:
+        '\n\nCRITICAL: STAY COMPLETELY SILENT while using tools. Do not output ANY text until you have the complete result ready. No explanations, no progress updates, no commentary. Work silently and only speak once with the final result.',
+      enabled: true,
+      requiresAuth: false,
+      routingKeywords: ['confluence', 'jira', 'atlassian'],
+      routingDescription:
+        'Call this tool to transfer to the atlassian agent. This agent can handle confluence and jira queries.',
+    },
     // {
     //   id: 'food_delivery',
     //   name: 'Food Delivery Agent',

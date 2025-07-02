@@ -30,6 +30,12 @@ export const mapIntentToAgent = (
   if (isToolDetected(detectedTools, 'websearch')) {
     return 'web_search';
   }
+  if (isToolDetected(detectedTools, 'confluence')) {
+    return 'atlassian';
+  }
+  if (isToolDetected(detectedTools, 'jira')) {
+    return 'atlassian';
+  }
   return undefined;
 };
 

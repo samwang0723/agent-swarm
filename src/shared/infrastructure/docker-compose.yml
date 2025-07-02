@@ -106,6 +106,13 @@ services:
     networks:
       - temporal-network
 
+  atlassian:
+    image: mcp/atlassian:latest
+    ports:
+      - '3005:3005'
+    networks:
+      - temporal-network
+
 volumes:
   db_data:
 

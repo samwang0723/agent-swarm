@@ -1,11 +1,13 @@
 import {
   Agent,
   Hive,
-  type HiveCreateSwarmOptions,
   Swarm,
+  type HiveCreateSwarmOptions,
   type SwarmOptions,
 } from 'agentswarm';
-import { z } from 'zod';
+import { LanguageModelV1 } from 'ai';
+import { z, ZodObject } from 'zod';
+import { AgentRegistry } from './agent.repository';
 
 export const UBER_EATS_DOMAIN = 'https://www.ubereats.com';
 
@@ -20,44 +22,51 @@ export interface ChatContext {
   accessToken?: string; // User's OAuth access token for MCP services
 }
 
-export interface HandoverTool {
-  type: 'handover';
-  description: string;
-  parameters: z.ZodObject<z.ZodRawShape>;
-  execute: (args: Record<string, unknown>) => Promise<{
-    agent: Agent<ChatContext>;
-    context: { topic: string };
-  }>;
-}
+export const HandoverToolSchema = z.object({
+  type: z.literal('handover'),
+  description: z.string(),
+  parameters: z.instanceof(ZodObject),
+  execute: z.function(z.tuple([z.any()]), z.promise(z.any())),
+});
 
-export class ExtendedSwarm<
-  SWARM_CONTEXT extends object,
-> extends Swarm<SWARM_CONTEXT> {
-  constructor(options: SwarmOptions<SWARM_CONTEXT>) {
+export type HandoverTool = z.infer<typeof HandoverToolSchema>;
+
+export class ExtendedSwarm<TContext extends object> extends Swarm<TContext> {
+  public readonly hive: ExtendedHive<TContext>;
+
+  constructor(
+    options: SwarmOptions<TContext> & { hive: ExtendedHive<TContext> }
+  ) {
     super(options);
+    this.hive = options.hive;
   }
 
-  public setActiveAgent(agent: Agent<SWARM_CONTEXT>): void {
+  public setActiveAgent(agent: Agent<TContext>): void {
     this._activeAgent = agent;
   }
 }
 
-export class ExtendedHive<
-  HIVE_CONTEXT extends object,
-> extends Hive<HIVE_CONTEXT> {
+export class ExtendedHive<TContext extends object> extends Hive<TContext> {
+  public readonly registry: AgentRegistry;
+  constructor(options: {
+    queen: Agent<TContext>;
+    defaultModel: LanguageModelV1;
+    defaultContext: TContext;
+    registry: AgentRegistry;
+  }) {
+    super(options);
+    this.registry = options.registry;
+  }
+
   public override spawnSwarm(
-    options?: HiveCreateSwarmOptions<HIVE_CONTEXT>
-  ): ExtendedSwarm<HIVE_CONTEXT> {
-    if (!this.defaultInitialContext && !options?.defaultContext) {
-      throw new Error(
-        `Unable to create swarm from Hive: default context for swarm must be passed in Hive() or in Hive.swarm()`
-      );
-    }
-    return new ExtendedSwarm<HIVE_CONTEXT>({
+    options?: HiveCreateSwarmOptions<TContext>
+  ): ExtendedSwarm<TContext> {
+    const swarmOptions: SwarmOptions<TContext> = {
       defaultModel: options?.defaultModel || this['defaultModel'],
       queen: options?.queen || this.queen,
       initialContext: (options?.defaultContext || this.defaultInitialContext)!,
       messages: options?.messages,
-    });
+    };
+    return new ExtendedSwarm<TContext>({ ...swarmOptions, hive: this });
   }
 }

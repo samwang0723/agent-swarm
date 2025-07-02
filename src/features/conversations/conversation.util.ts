@@ -1,10 +1,37 @@
-import { LanguageModelUsage, ToolCall, ToolResult } from 'ai';
-import { ClientLocation, LoggableEvent, TimeRange } from './conversation.dto';
+import { LanguageModelUsage } from 'ai';
+import { ClientLocation, TimeRange } from './conversation.dto';
 import { calculateCost } from '@/shared/utils/costs';
 import { getCurrentModelInfo } from '@/shared/config/models';
 import logger from '@/shared/utils/logger';
 
 export const sessionCostCache = new Map<string, number>();
+
+// Helper function to check if a tool is detected in the intent result
+export const isToolDetected = (
+  detectedTools: string[] | undefined,
+  toolName: string
+): boolean => {
+  return detectedTools ? detectedTools.includes(toolName) : false;
+};
+
+// Maps detected intent tools to a specific agent ID
+export const mapIntentToAgent = (
+  detectedTools: string[]
+): string | undefined => {
+  if (isToolDetected(detectedTools, 'email')) {
+    return 'google_assistant';
+  }
+  if (isToolDetected(detectedTools, 'calendar')) {
+    return 'google_assistant';
+  }
+  if (isToolDetected(detectedTools, 'restaurant')) {
+    return 'restaurant_recommendation';
+  }
+  if (isToolDetected(detectedTools, 'websearch')) {
+    return 'web_search';
+  }
+  return undefined;
+};
 
 // Extract client IP from request headers
 export const extractClientIP = (
@@ -245,11 +272,13 @@ export const extractTimeRange = (
           };
         }
       } catch (error) {
-        logger.warn('Failed to parse date from message:', error);
+        logger.warn(`Failed to parse date string: ${matches[0]}`, error);
+        // Continue to next pattern
       }
     }
   }
 
+  // Fallback if no specific date found
   return null;
 };
 
@@ -259,56 +288,32 @@ export function logTokenUsage(
 ) {
   const modelInfo = getCurrentModelInfo();
   const cost = calculateCost(
-    modelInfo.modelName!,
+    modelInfo.modelName,
     promptTokens,
     completionTokens
   );
 
-  const currentTotalCost = sessionCostCache.get(sessionId) || 0;
-  const newTotalCost = currentTotalCost + (cost || 0);
-  sessionCostCache.set(sessionId, newTotalCost);
-
-  logger.info('------------------------------');
-  logger.info(`Model: ${modelInfo.key} (${modelInfo.modelName})`);
-  logger.info(`Prompt tokens: ${promptTokens}`);
-  logger.info(`Completion tokens: ${completionTokens}`);
-  logger.info(`Total tokens: ${totalTokens}`);
-  if (cost !== null) {
-    logger.info(`Estimated cost for this call: $${cost.toFixed(6)}`);
-    logger.info(`Total session cost: $${newTotalCost.toFixed(6)}`);
+  const currentCost = sessionCostCache.get(sessionId) || 0;
+  if (cost) {
+    sessionCostCache.set(sessionId, currentCost + cost);
   }
-  logger.info('------------------------------');
+
+  logger.info({
+    message: 'Token Usage',
+    sessionId,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    cost: `$${cost?.toFixed(6)}`,
+    totalCost: `$${(currentCost + (cost || 0)).toFixed(6)}`,
+  });
 }
 
-// Helper function to log tool information
-export function logToolInformation(sessionId: string, event: LoggableEvent) {
-  // logger.info('Event:', event);
-  logTokenUsage(sessionId, event.usage);
-  logger.info(
-    `Step finished - Type: ${event.stepType}, Tools: ${
-      event.toolCalls?.length || 0
-    }, Results: ${event.toolResults?.length || 0}`
-  );
-
-  if (event.toolCalls && event.toolCalls.length > 0) {
-    logger.info(
-      'Tool calls:',
-      event.toolCalls.map(
-        (tc: ToolCall<string, unknown>) =>
-          `${tc.toolName}(${JSON.stringify(tc.args)})`
-      )
-    );
-  }
-
-  if (event.toolResults && event.toolResults.length > 0) {
-    logger.info(
-      'Tool results:',
-      event.toolResults.map((tr: ToolResult<string, unknown, unknown>) => {
-        const jsonStr = JSON.stringify(tr.result);
-        const truncated =
-          jsonStr.length > 100 ? jsonStr.slice(0, 300) + '...' : jsonStr;
-        return `${tr.toolName}: ${truncated}`;
-      })
-    );
+// Placeholder for tool logging
+export function logToolInformation(sessionId: string, event: unknown) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+  if (event && typeof event === 'object' && 'usage' in event) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    logTokenUsage(sessionId, event.usage as LanguageModelUsage);
   }
 }

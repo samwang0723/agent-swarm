@@ -65,7 +65,7 @@ const createMultiServiceAgent = (
       )}. Available tools from these services allow you to help users with various tasks.`,
     tools: combinedTools,
     model: modelInstance,
-    maxTurns: 10,
+    maxTurns: 2,
   });
 };
 
@@ -93,7 +93,7 @@ const createAdaptiveAgent = (systemPrompt?: string, model?: string) => {
       )}`,
     tools: tools,
     model: modelInstance,
-    maxTurns: 10,
+    maxTurns: 2,
   });
 };
 
@@ -124,7 +124,7 @@ const createSinglePurposeAgent = (
       )}`,
     tools: convertedTools,
     model: modelInstance,
-    maxTurns: 10,
+    maxTurns: 2,
   });
 };
 

@@ -117,7 +117,7 @@ export class AgentRegistry {
         parameters: z.object({
           topic: z.string().describe('User requested topic'),
         }),
-        execute: async (args: Record<string, unknown>) => {
+        execute: async args => {
           const topic = ((args.topic as string) || '').trim();
           if (!agent) {
             throw new Error(`${agentConfig.name} is not available`);
@@ -176,7 +176,7 @@ export class AgentRegistry {
       parameters: z.object({
         topic: z.string().describe('User requested topic'),
       }),
-      execute: async (args: Record<string, unknown>) => {
+      execute: async args => {
         const topic = ((args.topic as string) || '').trim();
         if (!this.receptionistAgent) {
           throw new Error('Receptionist agent is not available');

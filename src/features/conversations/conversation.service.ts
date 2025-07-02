@@ -1,23 +1,27 @@
 import { LanguageModelV1, streamText } from 'ai';
 import { messageHistory } from './history.service';
-import { OutputStrategy } from './conversation.dto';
+import { OutputStrategy, Message } from './conversation.dto';
 import logger from '@/shared/utils/logger';
 import { Session } from '@/shared/middleware/auth';
 import { getOrCreateSwarm } from '@/features/agents/agent.swarm';
 import { embeddingService } from '@/features/embeddings';
 import { getCalendarEventsByTimeRange } from '@/features/calendar/calendar.repository';
-import { Message } from './conversation.dto';
 import {
   logToolInformation,
   extractTimeRange,
   detectClientTimezone,
   extractClientDateTime,
+  isToolDetected,
+  mapIntentToAgent,
 } from './conversation.util';
 // Import intent detection services
 import { CompositeIntentDetector } from '@/shared/intent/compositeIntentDetector.service';
 import { PatternIntentDetector } from '@/shared/intent/patternIntentDetector.service';
 import { KeywordIntentDetector } from '@/shared/intent/keywordIntentDetector.service';
-import type { IToolIntentDetector } from '@/features/intent/intentDetector.service';
+import type {
+  IToolIntentDetector,
+  ToolIntentResult,
+} from '@/features/intent/intentDetector.service';
 
 // Create a singleton intent detector instance using composite pattern for best accuracy
 const createIntentDetector = (): IToolIntentDetector => {
@@ -34,14 +38,6 @@ const createIntentDetector = (): IToolIntentDetector => {
 
 // Global intent detector instance
 const intentDetector = createIntentDetector();
-
-// Helper function to check if a tool is detected in the intent result
-const isToolDetected = (
-  detectedTools: string[] | undefined,
-  toolName: string
-): boolean => {
-  return detectedTools ? detectedTools.includes(toolName) : false;
-};
 
 // Helper function to handle text streaming with efficient accumulation
 async function readTextStream(
@@ -111,6 +107,7 @@ async function handleRagStream(
 async function handleSwarmStream(
   session: Session,
   model: LanguageModelV1,
+  intentResult: ToolIntentResult,
   history: Message[],
   outputStrategy: OutputStrategy
 ) {
@@ -123,14 +120,27 @@ async function handleSwarmStream(
     // logger.info('Swarm queen', swarm.queen);
     // logger.info('Swarm active agent', swarm.activeAgent);
 
-    // manual override to use the queen as the active agent as returnToQueen sometimes doesn't work
-    // Only use for Gemini models
-    if (model.modelId.includes('gemini')) {
-      swarm.setActiveAgent(swarm.queen);
+    // New logic to set active agent based on intent
+    if (intentResult.requiresTools && intentResult.detectedTools) {
+      const agentId = mapIntentToAgent(intentResult.detectedTools);
+      if (agentId && swarm.hive.registry) {
+        const intentAgent = swarm.hive.registry.getAgent(agentId);
+        if (intentAgent) {
+          swarm.setActiveAgent(intentAgent);
+          logger.info(
+            `[${session.id}] Switched active agent to ${agentId} based on intent.`
+          );
+        } else {
+          swarm.setActiveAgent(swarm.queen!);
+          logger.warn(
+            `[${session.id}] Agent with id ${agentId} not found for intent. Using default agent.`
+          );
+        }
+      }
     }
+
     const result = swarm.streamText({
       messages: history,
-      returnToQueen: model.modelId.includes('gemini'),
       onStepFinish: event => logToolInformation(session.id, event),
     });
 
@@ -323,5 +333,11 @@ export async function sendMessage(
     return handleRagStream(session, model, history, outputStrategy);
   }
 
-  return handleSwarmStream(session, model, history, outputStrategy);
+  return handleSwarmStream(
+    session,
+    model,
+    intentResult,
+    history,
+    outputStrategy
+  );
 }

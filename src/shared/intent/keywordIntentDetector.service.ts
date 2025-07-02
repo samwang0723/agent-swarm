@@ -70,6 +70,28 @@ export class KeywordIntentDetector implements IToolIntentDetector {
       'table for',
       'dinner reservation',
     ],
+    websearch: [
+      'google',
+      'search the web',
+      'web search',
+      'search online',
+      'internet search',
+      'bing',
+      'search engine',
+      'lookup online',
+      'look up online',
+      'research online',
+      'find on web',
+      'find on internet',
+      'latest news',
+      'current news',
+      'recent news',
+      'news about',
+      'search news',
+      'google search',
+      'web lookup',
+      'online research',
+    ],
   };
 
   /**
@@ -136,7 +158,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
     };
 
     if (requiresTools) {
-      console.log(`[KeywordIntentDetector] Tool intent detected:`, {
+      logger.info(`[KeywordIntentDetector] Tool intent detected:`, {
         transcript:
           transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''),
         detectedTools,
@@ -144,7 +166,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
         totalMatches,
       });
     } else {
-      console.log(
+      logger.info(
         `[KeywordIntentDetector] No tool intent detected for transcript:`,
         transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
       );
@@ -170,7 +192,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
       this.toolKeywords[toolName] = [];
     }
     this.toolKeywords[toolName].push(...keywords);
-    console.log(
+    logger.info(
       `[KeywordIntentDetector] Added ${keywords.length} keywords to ${toolName} category`
     );
   }

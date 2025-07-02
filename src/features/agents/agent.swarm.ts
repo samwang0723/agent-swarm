@@ -1,10 +1,10 @@
 import { LanguageModelV1 } from 'ai';
 import { ChatContext } from './agent.dto';
-import { createBusinessLogicAgent } from './agent.service';
 import logger from '@/shared/utils/logger';
 
 import { Session } from '@/shared/middleware/auth';
 import { ExtendedHive, ExtendedSwarm } from './agent.dto';
+import { AgentFactory } from './agent.factory';
 
 // Cache for swarms to persist across messages
 export const swarmCache = new Map<string, ExtendedSwarm<ChatContext>>();
@@ -14,10 +14,19 @@ function createHiveSwarm(
   model: LanguageModelV1,
   accessToken?: string
 ): ExtendedSwarm<ChatContext> {
+  const factory = AgentFactory.getInstance();
+  const queen = factory.createBusinessLogicAgent(accessToken);
+  const registry = factory.getRegistry();
+
+  if (!registry) {
+    throw new Error('Agent registry could not be initialized.');
+  }
+
   const hive = new ExtendedHive<ChatContext>({
-    queen: createBusinessLogicAgent(accessToken),
+    queen,
     defaultModel: model,
-    defaultContext: { topic: null },
+    defaultContext: { topic: null, accessToken },
+    registry,
   });
 
   return hive.spawnSwarm();

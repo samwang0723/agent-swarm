@@ -250,6 +250,18 @@ export class PatternIntentDetector implements IToolIntentDetector {
         'cuisine',
         'dine',
       ]),
+      websearch: new Set([
+        'search',
+        'google',
+        'bing',
+        'web',
+        'internet',
+        'online',
+        'lookup',
+        'research',
+        'browse',
+        'query',
+      ]),
     };
 
     const allowedKeywords = toolSpecificKeywords[toolName] || new Set();

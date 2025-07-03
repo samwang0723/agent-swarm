@@ -1,11 +1,11 @@
 import { Tool } from 'ai';
 import { McpServerConfig } from './mcp.dto';
 import { McpClient } from './mcp.service';
-import logger from '@/shared/utils/logger';
-import type { ModelProvider } from '@/shared/config/models';
-import { mcpServers } from '@/shared/config/mcp';
+import logger from '../../shared/utils/logger';
+import type { ModelProvider } from '../../shared/config/models';
+import { mcpServers } from '../../shared/config/mcp';
 // import { logCompleteToolRegistryForLLM } from '@utils/schema-logger';
-import { getCurrentModelInfo } from '@/shared/config/models';
+import { getCurrentModelInfo } from '../../shared/config/models';
 
 export class McpRegistry {
   private clients: Map<string, McpClient> = new Map();

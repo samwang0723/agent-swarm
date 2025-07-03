@@ -1,27 +1,28 @@
 import { LanguageModelV1, streamText } from 'ai';
-import { messageHistory } from './history.service';
 import { OutputStrategy, Message } from './conversation.dto';
-import logger from '@/shared/utils/logger';
-import { Session } from '@/shared/middleware/auth';
-import { getOrCreateSwarm } from '@/features/agents/agent.swarm';
-import { embeddingService } from '@/features/embeddings';
-import { getCalendarEventsByTimeRange } from '@/features/calendar/calendar.repository';
+import logger from '../../shared/utils/logger';
+import { Session } from '../../shared/middleware/auth';
+import { getOrCreateUserOrchestration } from '../agents/agent.swarm';
+import { mastraMemoryService } from '../agents/mastra.memory';
+import { embeddingService } from '../embeddings';
+import { getCalendarEventsByTimeRange } from '../calendar/calendar.repository';
 import {
-  logToolInformation,
   extractTimeRange,
   detectClientTimezone,
   extractClientDateTime,
   isToolDetected,
   mapIntentToAgent,
+  safePreview,
 } from './conversation.util';
 // Import intent detection services
-import { CompositeIntentDetector } from '@/shared/intent/compositeIntentDetector.service';
-import { PatternIntentDetector } from '@/shared/intent/patternIntentDetector.service';
-import { KeywordIntentDetector } from '@/shared/intent/keywordIntentDetector.service';
+import { CompositeIntentDetector } from '../../shared/intent/compositeIntentDetector.service';
+import { PatternIntentDetector } from '../../shared/intent/patternIntentDetector.service';
+import { KeywordIntentDetector } from '../../shared/intent/keywordIntentDetector.service';
 import type {
   IToolIntentDetector,
   ToolIntentResult,
-} from '@/features/intent/intentDetector.service';
+} from '../intent/intentDetector.service';
+import { toolRegistry } from '../mcp/mcp.repository';
 
 // Create a singleton intent detector instance using composite pattern for best accuracy
 const createIntentDetector = (): IToolIntentDetector => {
@@ -69,36 +70,108 @@ async function readTextStream(
 async function handleRagStream(
   session: Session,
   model: LanguageModelV1,
-  history: Message[],
-  outputStrategy: OutputStrategy
+  outputStrategy: OutputStrategy,
+  userMessage: string
 ) {
   try {
     outputStrategy.onStart?.({ sessionId: session.id, streaming: true });
 
+    // Save the current user message for session state (best effort)
+    logger.debug(`[${session.id}] RAG: Saving user message for session state`, {
+      messageLength: userMessage.length,
+      messagePreview: safePreview(userMessage, 100).preview,
+    });
+
+    try {
+      await mastraMemoryService.saveUserMessage(
+        session.id,
+        session.id,
+        userMessage
+      );
+      logger.debug(`[${session.id}] RAG: User message saved successfully`);
+    } catch (saveError) {
+      logger.warn(
+        `[${session.id}] RAG: Failed to save user message (non-critical)`,
+        {
+          error: saveError,
+          sessionId: session.id,
+        }
+      );
+      // Don't throw - this is non-critical for RAG flows
+    }
+
+    // For RAG flows, we don't need full conversation history - we use the current message
+    // with RAG context. This is different from agent flows where history matters.
+    logger.debug(`[${session.id}] RAG: Using current message for LLM call`);
+
+    // Create a simple message array with just the current user message
+    const historyMessages: Message[] = [
+      {
+        role: 'user',
+        content: userMessage,
+      },
+    ];
+
+    logger.debug(`[${session.id}] RAG: Prepared messages for LLM`, {
+      messageCount: historyMessages.length,
+      messageLength: userMessage.length,
+    });
+
     const result = streamText({
       model,
-      messages: history,
+      messages: historyMessages,
       // maxTokens: 500,
       // temperature: 0.7,
     });
 
     const finalText = await readTextStream(result.textStream, outputStrategy);
-    messageHistory.addAssistantMessage(session.id, finalText);
+
+    // Save assistant message for session state (best effort)
+    try {
+      await mastraMemoryService.saveAssistantMessage(
+        session.id,
+        session.id,
+        finalText
+      );
+    } catch (saveError) {
+      logger.warn(
+        `[${session.id}] RAG: Failed to save assistant message (non-critical)`,
+        {
+          error: saveError,
+          sessionId: session.id,
+        }
+      );
+      // Don't throw - this is non-critical for RAG flows
+    }
 
     outputStrategy.onFinish?.({ complete: true, sessionId: session.id });
 
+    // For RAG flows, return a simple conversation with the current interaction
+    // RAG is stateless - it doesn't need full conversation history
+    const messages = [
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: finalText },
+    ];
+
     return {
-      messages: messageHistory.getHistory(session.id),
+      messages,
       newMessage: finalText,
     };
   } catch (error) {
     logger.error('sendMessage with RAG:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage =
+      error instanceof Error ? error.message : safePreview(error, 500).preview;
 
     outputStrategy.onError?.(errorMessage);
 
+    // For RAG flows, return a simple conversation with the current interaction
+    const messages = [
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: `Error: ${errorMessage}` },
+    ];
+
     return {
-      messages: messageHistory.getHistory(session.id),
+      messages,
       newMessage: `Error: ${errorMessage}`,
     };
   }
@@ -108,70 +181,260 @@ async function handleSwarmStream(
   session: Session,
   model: LanguageModelV1,
   intentResult: ToolIntentResult,
-  history: Message[],
-  outputStrategy: OutputStrategy
+  outputStrategy: OutputStrategy,
+  augmentedMessage: string
 ) {
-  // Get or create swarm for this user
-  const swarm = getOrCreateSwarm(session, model);
+  let selectedAgentId: string | undefined;
+  let memoryContext:
+    | {
+        resourceId: string;
+        threadId: string;
+      }
+    | undefined;
 
   try {
     outputStrategy.onStart?.({ sessionId: session.id, streaming: true });
-    // logger.info('Sending message to swarm', history);
-    // logger.info('Swarm queen', swarm.queen);
-    // logger.info('Swarm active agent', swarm.activeAgent);
 
-    // New logic to set active agent based on intent
+    // Use Mastra workflow orchestration
+    const orchestration = await getOrCreateUserOrchestration(session, model);
+
+    // Debug logging for agent tool availability
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(
+        `[DEBUG_MCP] Agent orchestration loaded for session ${session.id}`
+      );
+      logger.info(
+        `[DEBUG_MCP] - Available agents:`,
+        Object.keys(orchestration.agents)
+      );
+      logger.info(
+        `[DEBUG_MCP] - Receptionist agent available:`,
+        !!orchestration.receptionistAgent
+      );
+      logger.info(`[DEBUG_MCP] - Intent result:`, {
+        requiresTools: intentResult.requiresTools,
+        detectedTools: intentResult.detectedTools,
+        confidence: intentResult.confidence,
+      });
+    }
+
+    // Extract memory context from orchestration
+    memoryContext = orchestration.memoryContext;
+    if (!memoryContext) {
+      throw new Error(`Memory context not available for session ${session.id}`);
+    }
+
+    // Check if we should route to a specific agent based on intent
+    let targetAgent = orchestration.receptionistAgent;
+    selectedAgentId = 'receptionist';
     if (intentResult.requiresTools && intentResult.detectedTools) {
       const agentId = mapIntentToAgent(intentResult.detectedTools);
-      if (agentId && swarm.hive.registry) {
-        const intentAgent = swarm.hive.registry.getAgent(agentId);
-        if (intentAgent) {
-          swarm.setActiveAgent(intentAgent);
-          logger.info(
-            `[${session.id}] Switched active agent to ${agentId} based on intent.`
-          );
-        } else {
-          swarm.setActiveAgent(swarm.queen!);
-          logger.warn(
-            `[${session.id}] Agent with id ${agentId} not found for intent. Using default agent.`
-          );
-        }
+      if (agentId && orchestration.agents[agentId]) {
+        targetAgent = orchestration.agents[agentId];
+        selectedAgentId = agentId;
+        logger.info(
+          `[${session.id}] Routing to specific agent ${agentId} based on intent`
+        );
+      } else {
+        logger.warn(
+          `[${session.id}] Could not find agent ${agentId}, using receptionist`,
+          {
+            requestedAgent: agentId,
+            availableAgents: Object.keys(orchestration.agents),
+            detectedTools: intentResult.detectedTools,
+          }
+        );
       }
     }
 
-    const result = swarm.streamText({
-      messages: history,
-      onStepFinish: event => logToolInformation(session.id, event),
+    // The targetAgent is now correctly typed as MastraAgent
+    if (!targetAgent || typeof targetAgent.stream !== 'function') {
+      logger.error(
+        `[${session.id}] Target agent does not have a valid stream method`,
+        {
+          selectedAgentId,
+          agentMethods: targetAgent ? Object.keys(targetAgent) : [],
+          hasStream: !!(targetAgent && targetAgent.stream),
+          streamType: targetAgent && typeof targetAgent.stream,
+        }
+      );
+      throw new Error(`Agent ${selectedAgentId} does not support streaming`);
+    }
+
+    // Type the agent properly for Mastra stream API
+    const agent = targetAgent;
+
+    // Debug logging for tool registry status
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(`[DEBUG_MCP] Tool registry status check:`);
+
+      // Get tool registry status
+      const toolsByServer = toolRegistry.getToolsByServerMap();
+      const totalTools = Object.values(toolsByServer).reduce(
+        (total, serverTools) => total + Object.keys(serverTools).length,
+        0
+      );
+
+      logger.info(
+        `[DEBUG_MCP] - Total MCP servers: ${Object.keys(toolsByServer).length}`
+      );
+      logger.info(`[DEBUG_MCP] - Total tools registered: ${totalTools}`);
+      logger.info(
+        `[DEBUG_MCP] - Servers and tool counts:`,
+        Object.entries(toolsByServer).map(([server, tools]) => ({
+          server,
+          toolCount: Object.keys(tools).length,
+          tools: Object.keys(tools),
+        }))
+      );
+
+      // Check for web search tools specifically
+      const webSearchTools = Object.entries(toolsByServer).flatMap(
+        ([server, tools]) =>
+          Object.keys(tools)
+            .filter(
+              toolName =>
+                toolName.includes('search') ||
+                toolName.includes('web') ||
+                toolName.includes('brave')
+            )
+            .map(toolName => `${server}:${toolName}`)
+      );
+
+      logger.info(`[DEBUG_MCP] - Web search tools available:`, webSearchTools);
+
+      // Check connection status for each server
+      Object.keys(toolsByServer).forEach(serverName => {
+        const serverTools = toolRegistry.getServerTools(serverName);
+        logger.info(
+          `[DEBUG_MCP] - Server ${serverName} status: ${Object.keys(serverTools).length > 0 ? 'connected' : 'disconnected'}`
+        );
+      });
+    }
+
+    // Debug logging before agent.stream() call
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(`[DEBUG_MCP] Pre-agent stream execution:`);
+      logger.info(`[DEBUG_MCP] - Selected agent: ${selectedAgentId}`);
+      logger.info(
+        `[DEBUG_MCP] - Agent has stream method: ${typeof agent.stream === 'function'}`
+      );
+      logger.info(`[DEBUG_MCP] - Memory context:`, {
+        resourceId: memoryContext.resourceId,
+        threadId: memoryContext.threadId,
+      });
+      logger.info(
+        `[DEBUG_MCP] - Augmented message length: ${augmentedMessage.length}`
+      );
+      logger.info(
+        `[DEBUG_MCP] - Augmented message preview:`,
+        augmentedMessage.substring(0, 200) + '...'
+      );
+    }
+
+    logger.debug(`[${session.id}] Calling agent.stream() with memory context`, {
+      sessionId: session.id,
+      selectedAgentId,
+      memoryContext: {
+        resourceId: memoryContext.resourceId,
+        threadId: memoryContext.threadId,
+      },
+      messageLength: augmentedMessage.length,
+    });
+
+    // Use the augmented message (with RAG context) for the agent
+    // Mastra agents handle conversation history automatically through memory
+    // Pass memory context as second parameter for proper tool execution
+    const streamResult = await agent.stream(augmentedMessage, {
+      resourceId: memoryContext.resourceId,
+      threadId: memoryContext.threadId,
     });
 
     // Stream text and accumulate result
-    const finalText = await readTextStream(result.textStream, outputStrategy);
+    const finalText = await readTextStream(
+      streamResult.textStream,
+      outputStrategy
+    );
 
-    // Handle response messages and update history
-    try {
-      const responseMessages = await result.messages;
-      if (responseMessages?.length > 0) {
-        messageHistory.addToolMessages(session.id, responseMessages);
+    // Debug logging for stream result
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(`[DEBUG_MCP] Agent stream execution completed:`);
+      logger.info(`[DEBUG_MCP] - Stream completed successfully: true`);
+      logger.info(`[DEBUG_MCP] - Final text length: ${finalText.length}`);
+      logger.info(
+        `[DEBUG_MCP] - Final text preview:`,
+        finalText.substring(0, 200) + '...'
+      );
+
+      // Check if any tool calls were mentioned in the response
+      const toolCallPatterns = [
+        /tool.*call/i,
+        /executing.*tool/i,
+        /calling.*function/i,
+        /search.*result/i,
+        /web.*search/i,
+        /brave.*search/i,
+      ];
+
+      const toolCallsDetected = toolCallPatterns.some(pattern =>
+        pattern.test(finalText)
+      );
+      logger.info(
+        `[DEBUG_MCP] - Tool calls detected in response: ${toolCallsDetected}`
+      );
+
+      if (toolCallsDetected) {
+        logger.info(`[DEBUG_MCP] - Response suggests tool execution occurred`);
+      } else {
+        logger.warn(
+          `[DEBUG_MCP] - No tool execution patterns found in response`
+        );
       }
-    } catch (error) {
-      logger.error('Error adding response messages to history:', error);
     }
 
     outputStrategy.onFinish?.({ complete: true, sessionId: session.id });
 
+    // Get updated messages from Mastra memory
+    const { messages } = await mastraMemoryService.getUserMemory(
+      session.id,
+      session.id
+    );
+
     return {
-      messages: messageHistory.getHistory(session.id),
+      messages,
       newMessage: finalText,
     };
   } catch (error) {
-    logger.error('sendMessage with swarm:', error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (process.env.DEBUG_MCP === '1') {
+      logger.error(`[DEBUG_MCP] Agent stream execution failed:`, {
+        sessionId: session.id,
+        selectedAgentId: selectedAgentId || 'unknown',
+        intentResult,
+        augmentedMessageLength: augmentedMessage.length,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        memoryContext: memoryContext
+          ? {
+              resourceId: memoryContext.resourceId,
+              threadId: memoryContext.threadId,
+            }
+          : 'not available',
+      });
+    }
+
+    logger.error('sendMessage with agent orchestration:', error);
+    const errorMessage =
+      error instanceof Error ? error.message : safePreview(error, 500).preview;
 
     outputStrategy.onError?.(errorMessage);
 
-    // Return on error
+    // Get fallback history based on memory system
+    const messages = (
+      await mastraMemoryService.getUserMemory(session.id, session.id)
+    ).messages;
+
     return {
-      messages: messageHistory.getHistory(session.id),
+      messages,
       newMessage: `Error: ${errorMessage}`,
     };
   }
@@ -325,19 +588,18 @@ export async function sendMessage(
 
   logger.debug(`Augmented message: ${augmentedMessage}`);
 
-  // Add user message to history and get current history
-  messageHistory.addUserMessage(session.id, augmentedMessage);
-  const history = messageHistory.getHistory(session.id);
-
+  // Route to appropriate handler based on RAG vs agent flow
   if (ragApplied) {
-    return handleRagStream(session, model, history, outputStrategy);
+    // RAG flow: handleRagStream saves user message and fetches history internally for LLM call
+    return handleRagStream(session, model, outputStrategy, augmentedMessage);
   }
 
+  // Agent flow: handleSwarmStream uses Mastra's automatic memory management
   return handleSwarmStream(
     session,
     model,
     intentResult,
-    history,
-    outputStrategy
+    outputStrategy,
+    augmentedMessage
   );
 }

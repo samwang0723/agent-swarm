@@ -1,4 +1,4 @@
-import { McpServerConfig } from '@/features/mcp/mcp.dto';
+import { McpServerConfig } from '../../features/mcp/mcp.dto';
 
 export const mcpServers: McpServerConfig[] = [
   {

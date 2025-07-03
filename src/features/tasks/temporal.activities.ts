@@ -1,6 +1,6 @@
-import logger from '@/shared/utils/logger';
-import { GmailService } from '@/features/emails';
-import { embeddingService } from '@/features/embeddings';
+import logger from '../../shared/utils/logger';
+import { GmailService } from '../emails';
+import { embeddingService } from '../embeddings';
 import { CalendarService } from '../calendar';
 
 export async function importGmail(

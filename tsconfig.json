@@ -13,15 +13,7 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "declaration": true,
-    "baseUrl": "./src",
-    "paths": {
-      "@/*": ["./*"],
-      "@messages/*": ["messages/*"],
-      "@config/*": ["config/*"],
-      "@utils/*": ["utils/*"],
-      "@tools/*": ["tools/*"],
-      "@agents/*": ["agents/*"]
-    }
+    "baseUrl": "./src"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]

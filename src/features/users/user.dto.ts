@@ -1,4 +1,4 @@
-import { Session } from '@/shared/middleware/auth';
+import { Session } from '../../shared/middleware/auth';
 
 export interface GoogleUserInfo {
   email?: string | null;

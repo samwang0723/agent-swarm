@@ -1,13 +1,13 @@
-import logger from '@/shared/utils/logger';
+import logger from '../utils/logger';
 import type {
   IToolIntentDetector,
   ToolIntentResult,
-} from '@/features/intent/intentDetector.service';
+} from '../../features/intent/intentDetector.service';
 import {
   intentPatterns,
   keywordWeights,
   getKeywordWeight,
-} from '@/shared/config/intent/patterns';
+} from '../config/intent/patterns';
 
 // Import compromise for NLP text processing
 import nlp from 'compromise';

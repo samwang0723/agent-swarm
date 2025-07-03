@@ -1,27 +1,43 @@
-import { Agent } from 'agentswarm';
+import { Agent, createTool } from '@mastra/core';
+import { Tool } from 'ai';
 import { z } from 'zod';
-import { AgentConfig, AgentSystemConfig } from '@/shared/config/agents';
-import logger from '@/shared/utils/logger';
-import { toolRegistry } from '@/features/mcp/mcp.repository';
-import { createModelByKey } from '@/shared/config/models';
+import { Memory } from '@mastra/memory';
+import { AgentConfig, AgentSystemConfig } from '../../shared/config/agents';
+import logger from '../../shared/utils/logger';
+import { toolRegistry } from '../mcp/mcp.repository';
+import { createModelByKey } from '../../shared/config/models';
 import {
   validateAgentSystemConfig,
   logAgentSystemInfo,
-} from '@/shared/utils/agent';
-import { ChatContext, HandoverTool } from './agent.dto';
-import { createMultiServiceAgent } from './agent.service';
-import { loadSystemPrompt } from './agent.util';
+} from '../../shared/utils/agent';
+import { MastraMemoryContext } from './agent.dto';
+import { loadSystemPrompt, createBasicMastraAgent } from './agent.util';
+import { mastraMemoryService } from './mastra.memory';
+import {
+  createMastraMemory,
+  createAgentMemoryConfig,
+} from '../../shared/config/mastra';
+import { convertMultiServerMcpToolsToMastraTools } from './mastra.adapter';
+
+// Define the correct type for Mastra tools as returned by createTool
+type MastraToolResult = ReturnType<typeof createTool>;
 
 export class AgentRegistry {
-  private agents: Map<string, Agent<ChatContext>> = new Map();
-  private handoverTools: Map<string, HandoverTool> = new Map();
-  private receptionistAgent: Agent<ChatContext> | null = null;
+  private agents: Map<string, Agent> = new Map();
+  private handoverTools: Map<string, MastraToolResult> = new Map();
+  private receptionistAgent: Agent | null = null;
+  private receptionistWorkflow: unknown = null;
+  private memory: Memory | undefined;
+  private useMastra: boolean;
 
   constructor(
     private config: AgentSystemConfig,
-    private accessToken?: string
+    private accessToken?: string,
+    private userId?: string
   ) {
+    this.useMastra = process.env.USE_MASTRA === 'true';
     this.validateConfiguration();
+    this.initializeMemory();
     this.initializeRegistry();
   }
 
@@ -29,7 +45,9 @@ export class AgentRegistry {
     const validation = validateAgentSystemConfig(this.config);
 
     if (!validation.valid) {
-      const errorMessage = `Invalid agent configuration: ${validation.errors.join('; ')}`;
+      const errorMessage = `Invalid agent configuration: ${validation.errors.join(
+        '; '
+      )}`;
       logger.error(errorMessage);
       throw new Error(errorMessage);
     }
@@ -42,7 +60,98 @@ export class AgentRegistry {
     logAgentSystemInfo(this.config);
   }
 
+  private initializeMemory(): void {
+    if (!this.useMastra) return;
+
+    try {
+      logger.info('Starting Mastra memory initialization...');
+      this.memory = createMastraMemory();
+
+      logger.debug('Memory initialization result:', {
+        memoryCreated: !!this.memory,
+        memoryType: typeof this.memory,
+        memoryConstructor: this.memory ? this.memory.constructor.name : 'none',
+        memoryMethods: this.memory
+          ? Object.keys(this.memory).filter(
+              key => typeof this.memory![key as keyof Memory] === 'function'
+            )
+          : [],
+        memoryStringified: this.memory
+          ? 'memory instance exists'
+          : 'null memory',
+      });
+
+      // Validate memory instance
+      if (!this.memory) {
+        throw new Error('Memory instance is null after createMastraMemory()');
+      }
+
+      const memoryInstance = this.memory;
+      const requiredMethods = ['createThread', 'query'];
+      const missingMethods = requiredMethods.filter(
+        method => !memoryInstance[method as keyof Memory]
+      );
+
+      if (missingMethods.length > 0) {
+        logger.error('Memory instance missing required methods:', {
+          missingMethods,
+          hasCreateThread: !!memoryInstance.createThread,
+          hasQuery: !!memoryInstance.query,
+          availableMethods: Object.keys(memoryInstance),
+          memoryPrototype: Object.getPrototypeOf(memoryInstance),
+        });
+        throw new Error(
+          `Memory instance missing required methods: ${missingMethods.join(', ')}`
+        );
+      }
+
+      // Test memory instance functionality
+      try {
+        // Basic memory instance validation
+        if (typeof memoryInstance.createThread !== 'function') {
+          throw new Error('createThread is not a function');
+        }
+        if (typeof memoryInstance.query !== 'function') {
+          throw new Error('query is not a function');
+        }
+        logger.debug('Memory instance validation passed');
+      } catch (validationError) {
+        logger.error('Memory instance validation failed:', validationError);
+        throw new Error(`Memory validation failed: ${validationError}`);
+      }
+
+      // Initialize user memory if userId is provided
+      if (this.userId) {
+        mastraMemoryService.initializeUserMemory(this.userId).catch(error => {
+          logger.error(
+            'Failed to initialize user memory during registry setup:',
+            error
+          );
+        });
+      }
+
+      logger.info('✅ Mastra memory system initialized successfully', {
+        hasMemory: !!this.memory,
+        memoryType: typeof this.memory,
+        userId: this.userId || 'no userId',
+      });
+    } catch (error) {
+      logger.error('❌ Failed to initialize Mastra memory system:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        userId: this.userId,
+      });
+      throw error;
+    }
+  }
+
   private initializeRegistry(): void {
+    if (!this.useMastra) {
+      throw new Error(
+        'Mastra must be enabled for agent registry initialization'
+      );
+    }
+
     logger.info('Initializing agent registry...');
 
     // Set access token if provided
@@ -66,33 +175,120 @@ export class AgentRegistry {
   }
 
   private createSpecializedAgents(): void {
-    const enabledAgents = this.config.agents.filter(agent => agent.enabled);
+    const enabledAgents = this.config.agents.filter(a => a.enabled);
     logger.info(`Creating ${enabledAgents.length} enabled agents...`);
+
+    // Validate memory before creating agents
+    if (!this.memory) {
+      logger.error('Cannot create agents: Memory instance is null');
+      throw new Error('Memory instance is null - cannot create agents');
+    }
+
+    logger.debug('Pre-agent creation memory validation:', {
+      hasMemory: !!this.memory,
+      memoryType: typeof this.memory,
+      memoryConstructor: this.memory ? this.memory.constructor.name : 'none',
+    });
 
     for (const agentConfig of enabledAgents) {
       try {
         logger.info(
-          `Creating ${agentConfig.id} agent with MCP servers: ${agentConfig.mcpServers.join(', ')}`
+          `Creating ${agentConfig.id} agent with MCP servers: ${agentConfig.mcpServers.join(
+            ', '
+          )}`
         );
 
         const systemPrompt = loadSystemPrompt(agentConfig.systemPromptFile);
         const fullPrompt =
           systemPrompt + (agentConfig.additionalInstructions || '');
 
-        const agent = createMultiServiceAgent(
-          agentConfig.mcpServers,
-          fullPrompt
+        // Collect and convert tools from MCP servers
+        const serverToolsMap: Record<string, Record<string, Tool>> = {};
+        agentConfig.mcpServers.forEach(serverName => {
+          serverToolsMap[serverName] = toolRegistry.getServerTools(
+            serverName
+          ) as Record<string, Tool>;
+        });
+        const mastraTools =
+          convertMultiServerMcpToolsToMastraTools(serverToolsMap);
+
+        const modelInstance = createModelByKey(agentConfig.model);
+        if (!modelInstance) {
+          throw new Error(`Failed to create model for agent ${agentConfig.id}`);
+        }
+
+        // Validate memory before passing to agent
+        logger.debug(`Pre-agent creation validation for ${agentConfig.id}:`, {
+          hasMemory: !!this.memory,
+          memoryType: typeof this.memory,
+          memoryConstructor: this.memory
+            ? this.memory.constructor.name
+            : 'none',
+          memoryIsFunction: typeof this.memory === 'function',
+          memoryMethods: this.memory
+            ? Object.keys(this.memory).slice(0, 5)
+            : [],
+        });
+
+        if (!this.memory) {
+          throw new Error(
+            `Memory instance is null for agent ${agentConfig.id}`
+          );
+        }
+
+        logger.debug(
+          `Creating agent ${agentConfig.id} with validated memory instance`
         );
 
+        const agent = createBasicMastraAgent({
+          name: agentConfig.id,
+          instructions: fullPrompt,
+          model: modelInstance,
+          tools: mastraTools,
+          memory: this.memory, // Pass the actual Memory instance, not config
+        });
+
+        // Validate agent was created with memory
+        const agentMemory = (agent as { memory?: Memory }).memory;
+        logger.debug(`Post-creation memory validation for ${agentConfig.id}:`, {
+          agentHasMemory: !!agentMemory,
+          agentMemoryType: typeof agentMemory,
+          agentMemoryConstructor: agentMemory
+            ? agentMemory.constructor.name
+            : 'none',
+          agentMemoryIsSameInstance: agentMemory === this.memory,
+        });
+
+        if (!agentMemory) {
+          logger.error(
+            `⚠️  Agent ${agentConfig.id} was created without memory!`,
+            {
+              originalMemory: !!this.memory,
+              agentMemory: !!agentMemory,
+            }
+          );
+        }
+
         this.agents.set(agentConfig.id, agent);
-        logger.info(`✓ ${agentConfig.id} agent created successfully`);
+
+        logger.info(`✅ ${agentConfig.id} Mastra agent created successfully`, {
+          hasMemory: !!agentMemory,
+          memoryAttached: agentMemory === this.memory,
+        });
       } catch (error) {
-        logger.error(`✗ Failed to create ${agentConfig.id} agent:`, error);
-        throw new Error(
-          `Failed to create ${agentConfig.id} agent: ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
+        logger.error(`❌ Failed to create agent ${agentConfig.id}:`, {
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+          agentId: agentConfig.id,
+        });
+        throw error;
       }
     }
+
+    logger.info(`✅ All ${enabledAgents.length} agents created successfully`);
+
+    // Create handover tools after all agents are created
+    this.createHandoverTools();
   }
 
   private createHandoverTools(): void {
@@ -109,32 +305,43 @@ export class AgentRegistry {
         continue;
       }
 
-      const handoverTool: HandoverTool = {
-        type: 'handover',
+      // Create Mastra handover tool with correct execute signature
+      const mastraHandoverTool = createTool({
+        id: `transfer_to_${agentConfig.id}`,
         description:
           agentConfig.routingDescription ||
           `Call this tool to transfer to the ${agentConfig.name}`,
-        parameters: z.object({
+        inputSchema: z.object({
           topic: z.string().describe('User requested topic'),
+          context: z
+            .unknown()
+            .optional()
+            .describe('Additional context for the transfer'),
         }),
-        execute: async args => {
-          const topic = ((args.topic as string) || '').trim();
-          if (!agent) {
-            throw new Error(`${agentConfig.name} is not available`);
-          }
+        execute: async ({ context }) => {
+          // Access parameters from context object
+          const { topic, context: additionalContext } = context as {
+            topic: string;
+            context?: unknown;
+          };
+          const topicStr = (topic || '').trim();
           logger.debug(
-            `Transferring to ${agentConfig.id} agent for topic: ${topic}`
+            `Transferring to ${agentConfig.id} agent for topic: ${topicStr}`
           );
           return {
+            handover: true,
+            targetAgent: agentConfig.id,
             agent,
-            context: { topic },
+            context: { ...(additionalContext || {}), topic: topicStr },
           };
         },
-      };
+      });
 
-      const toolName = `transfer_to_${agentConfig.id}`;
-      this.handoverTools.set(toolName, handoverTool);
-      logger.debug(`✓ Created handover tool: ${toolName}`);
+      this.handoverTools.set(
+        `transfer_to_${agentConfig.id}`,
+        mastraHandoverTool
+      );
+      logger.debug(`✓ Created handover tool: transfer_to_${agentConfig.id}`);
     }
 
     logger.info(`Created ${this.handoverTools.size} handover tools`);
@@ -143,72 +350,174 @@ export class AgentRegistry {
   private createReceptionistAgent(): void {
     logger.info('Creating receptionist agent...');
 
-    const tools: Record<string, HandoverTool> = {};
-
-    // Add all handover tools to receptionist
-    for (const [toolName, tool] of this.handoverTools.entries()) {
-      tools[toolName] = tool;
+    // Validate memory before creating receptionist
+    if (!this.memory) {
+      logger.error('Cannot create receptionist: Memory instance is null');
+      throw new Error(
+        'Memory instance is null - cannot create receptionist agent'
+      );
     }
 
     const modelInstance = createModelByKey(this.config.receptionist.model);
+    if (!modelInstance) {
+      throw new Error('Failed to create model for receptionist agent');
+    }
 
-    this.receptionistAgent = new Agent<ChatContext>({
-      name: this.config.receptionist.name,
-      description: this.config.receptionist.description,
-      instructions: this.config.receptionist.instructions,
-      tools,
-      model: modelInstance,
-      maxTurns: 10,
+    // Mastra receptionist agent with workflow orchestration
+    const handoverTools = Array.from(this.handoverTools.values());
+
+    logger.debug('Pre-receptionist creation memory validation:', {
+      hasMemory: !!this.memory,
+      memoryType: typeof this.memory,
+      memoryConstructor: this.memory ? this.memory.constructor.name : 'none',
     });
 
+    this.receptionistAgent = createBasicMastraAgent({
+      name: this.config.receptionist.name,
+      instructions: this.config.receptionist.instructions,
+      model: modelInstance,
+      tools: handoverTools,
+      memory: this.memory, // Pass the actual Memory instance, not config
+    });
+
+    // Validate receptionist was created with memory
+    const receptionistMemory = (this.receptionistAgent as { memory?: Memory })
+      .memory;
+    logger.debug('Post-receptionist creation memory validation:', {
+      receptionistHasMemory: !!receptionistMemory,
+      receptionistMemoryType: typeof receptionistMemory,
+      receptionistMemoryConstructor: receptionistMemory
+        ? receptionistMemory.constructor.name
+        : 'none',
+      receptionistMemoryIsSameInstance: receptionistMemory === this.memory,
+    });
+
+    if (!receptionistMemory) {
+      logger.error('⚠️  Receptionist agent was created without memory!', {
+        originalMemory: !!this.memory,
+        receptionistMemory: !!receptionistMemory,
+      });
+    }
+
+    this.createReceptionistWorkflow();
     logger.info(
-      `✓ Receptionist agent created with ${Object.keys(tools).length} handover tools`
+      `✅ Mastra receptionist agent created with ${handoverTools.length} handover tools and workflow orchestration`,
+      {
+        hasMemory: !!receptionistMemory,
+        memoryAttached: receptionistMemory === this.memory,
+      }
     );
+  }
+
+  private createReceptionistWorkflow(): void {
+    if (!this.receptionistAgent) return;
+
+    try {
+      // TODO: Implement proper Mastra workflow using the new API
+      // For now, create a simple workflow placeholder to avoid the legacy API issues
+      this.receptionistWorkflow = {
+        id: 'receptionist-workflow',
+        description: 'Receptionist workflow for agent orchestration',
+        agents: this.agents,
+        receptionistAgent: this.receptionistAgent,
+
+        // Simple execution method
+        execute: async (input: {
+          message: string;
+          context?: unknown;
+          userId?: string;
+          sessionId?: string;
+        }) => {
+          // Execute receptionist agent first
+          const response = await this.receptionistAgent!.generate(
+            input.message
+          );
+
+          // Simple parsing to determine target agent
+          const targetAgent = this.parseTargetAgent(response.text);
+
+          return {
+            result: response.text,
+            targetAgent,
+          };
+        },
+      };
+
+      logger.info(
+        '✓ Receptionist workflow placeholder created (to be updated with proper Mastra workflow API)'
+      );
+    } catch (error) {
+      logger.error('Failed to create receptionist workflow:', error);
+    }
+  }
+
+  private parseTargetAgent(response: string): string | undefined {
+    // Simple parsing logic to determine target agent from response
+    // This should be enhanced based on your specific requirements
+    const agentIds = Array.from(this.agents.keys());
+
+    for (const agentId of agentIds) {
+      if (response.toLowerCase().includes(agentId.toLowerCase())) {
+        return agentId;
+      }
+    }
+
+    return undefined;
   }
 
   private setupBidirectionalHandovers(): void {
     logger.info('Setting up bidirectional handovers...');
 
-    // Create transfer back to receptionist tool
-    const transferToReceptionist: HandoverTool = {
-      type: 'handover',
-      description: 'Call this tool to transfer back to the receptionist',
-      parameters: z.object({
-        topic: z.string().describe('User requested topic'),
-      }),
-      execute: async args => {
-        const topic = ((args.topic as string) || '').trim();
-        if (!this.receptionistAgent) {
-          throw new Error('Receptionist agent is not available');
-        }
-        logger.debug(`Transferring back to receptionist for topic: ${topic}`);
-        return {
-          agent: this.receptionistAgent,
-          context: { topic },
-        };
-      },
-    };
-
-    // Add transfer back tool to all specialized agents
-    let agentsWithHandback = 0;
-    for (const agent of this.agents.values()) {
-      if (agent.tools) {
-        agent.tools['transfer_to_receptionist'] = transferToReceptionist;
-        agentsWithHandback++;
-      }
+    if (!this.receptionistAgent) {
+      throw new Error('Receptionist agent is not available');
     }
 
-    logger.info(`✓ Added handback capability to ${agentsWithHandback} agents`);
+    // Create Mastra handover tool for returning to receptionist
+    const transferToReceptionistTool = createTool({
+      id: 'transfer_to_receptionist',
+      description: 'Call this tool to transfer back to the receptionist',
+      inputSchema: z.object({
+        topic: z.string().describe('User requested topic'),
+        reason: z.string().optional().describe('Reason for transferring back'),
+      }),
+      execute: async ({ context }) => {
+        // Access parameters from context object
+        const { topic, reason } = context as {
+          topic: string;
+          reason?: string;
+        };
+        const topicStr = (topic || '').trim();
+        logger.debug(
+          `Transferring back to receptionist for topic: ${topicStr}, reason: ${reason}`
+        );
+        return {
+          handover: true,
+          targetAgent: 'receptionist',
+          agent: this.receptionistAgent!,
+          context: { reason, topic: topicStr },
+        };
+      },
+    });
+
+    this.handoverTools.set(
+      'transfer_to_receptionist',
+      transferToReceptionistTool
+    );
+    logger.info('✓ Added Mastra handback tool: transfer_to_receptionist');
   }
 
-  public getReceptionistAgent(): Agent<ChatContext> {
+  public getReceptionistAgent(): Agent {
     if (!this.receptionistAgent) {
       throw new Error('Receptionist agent not initialized');
     }
     return this.receptionistAgent;
   }
 
-  public getAgent(agentId: string): Agent<ChatContext> | undefined {
+  public getReceptionistWorkflow(): unknown {
+    return this.receptionistWorkflow;
+  }
+
+  public getAgent(agentId: string): Agent | undefined {
     return this.agents.get(agentId);
   }
 
@@ -223,7 +532,7 @@ export class AgentRegistry {
   }
 
   public getAgentConfig(agentId: string): AgentConfig | undefined {
-    return this.config.agents.find(config => config.id === agentId);
+    return this.config.agents.find(c => c.id === agentId);
   }
 
   public isAgentEnabled(agentId: string): boolean {
@@ -236,18 +545,66 @@ export class AgentRegistry {
     enabled: number;
     disabled: number;
     agents: { id: string; name: string; enabled: boolean }[];
+    useMastra: boolean;
   } {
-    const agents = this.config.agents.map(config => ({
-      id: config.id,
-      name: config.name,
-      enabled: config.enabled ?? false,
+    const agents = this.config.agents.map(c => ({
+      id: c.id,
+      name: c.name,
+      enabled: c.enabled ?? false,
     }));
-
     return {
       total: agents.length,
       enabled: agents.filter(a => a.enabled).length,
       disabled: agents.filter(a => !a.enabled).length,
       agents,
+      useMastra: this.useMastra,
     };
+  }
+
+  public getMemoryService() {
+    return this.useMastra ? mastraMemoryService : null;
+  }
+
+  public async initializeAgentMemory(
+    agentId: string,
+    userId: string,
+    sessionId: string
+  ): Promise<void> {
+    if (!this.useMastra) return;
+    try {
+      await mastraMemoryService.initializeUserMemory(userId);
+      logger.debug(
+        `Memory initialized for agent ${agentId}, user ${userId}, session ${sessionId}`
+      );
+    } catch (error) {
+      logger.error(`Failed to initialize memory for agent ${agentId}:`, error);
+      throw error;
+    }
+  }
+
+  public async getAgentMemoryContext(
+    userId: string,
+    sessionId: string
+  ): Promise<MastraMemoryContext | null> {
+    if (!this.useMastra || !userId) return null;
+    try {
+      const memoryCfg = createAgentMemoryConfig(userId, sessionId);
+      return {
+        resourceId: memoryCfg.resource,
+        threadId: memoryCfg.thread,
+        userId,
+      };
+    } catch (error) {
+      logger.error('Failed to get agent memory context:', error);
+      return null;
+    }
+  }
+
+  public isMastraEnabled(): boolean {
+    return this.useMastra;
+  }
+
+  public getUserId(): string | undefined {
+    return this.userId;
   }
 }

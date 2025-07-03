@@ -1,8 +1,8 @@
 import { LanguageModelUsage, ToolCall, ToolResult } from 'ai';
 import { ClientLocation, LoggableEvent, TimeRange } from './conversation.dto';
-import { calculateCost } from '@/shared/utils/costs';
-import { getCurrentModelInfo } from '@/shared/config/models';
-import logger from '@/shared/utils/logger';
+import { calculateCost } from '../../shared/utils/costs';
+import { getCurrentModelInfo } from '../../shared/config/models';
+import logger from '../../shared/utils/logger';
 
 export const sessionCostCache = new Map<string, number>();
 
@@ -316,6 +316,61 @@ export function logTokenUsage(
 }
 
 // Placeholder for tool logging
+// Helper function for safe object-to-string conversion with truncation
+export function safeStringify(
+  value: unknown,
+  maxLength: number = 1000
+): string {
+  try {
+    if (value === null) return 'null';
+    if (value === undefined) return 'undefined';
+
+    let stringified: string;
+    if (typeof value === 'string') {
+      stringified = value;
+    } else if (typeof value === 'object') {
+      stringified = JSON.stringify(value);
+    } else {
+      stringified = String(value);
+    }
+
+    return stringified.length > maxLength
+      ? stringified.substring(0, maxLength) + '...'
+      : stringified;
+  } catch (error) {
+    // Fallback for circular references or other JSON.stringify errors
+    return `[Object: ${typeof value}]`;
+  }
+}
+
+// Safe preview utility that handles string operations on unknown types
+export function safePreview(
+  value: unknown,
+  maxLength: number = 100
+): { preview: string; originalLength: number } {
+  if (typeof value === 'string') {
+    return {
+      preview:
+        value.length > maxLength
+          ? value.substring(0, maxLength) + '...'
+          : value,
+      originalLength: value.length,
+    };
+  }
+
+  // For non-string values, convert to safe string representation
+  const stringified = safeStringify(value, maxLength * 2); // Allow more room for conversion
+  const preview =
+    stringified.length > maxLength
+      ? stringified.substring(0, maxLength) + '...'
+      : stringified;
+
+  return {
+    preview,
+    originalLength: stringified.length,
+  };
+}
+
 export function logToolInformation(sessionId: string, event: LoggableEvent) {
   logTokenUsage(sessionId, event.usage as LanguageModelUsage);
   logger.info(

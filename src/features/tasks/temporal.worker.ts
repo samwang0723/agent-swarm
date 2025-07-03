@@ -1,6 +1,6 @@
 import { NativeConnection, Worker } from '@temporalio/worker';
-import * as activities from '@/features/tasks/temporal.activities';
-import config from '@/shared/config';
+import * as activities from './temporal.activities';
+import config from '../../shared/config';
 
 async function run() {
   // Step 1: Establish a connection with Temporal server.

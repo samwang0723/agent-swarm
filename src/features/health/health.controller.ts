@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { toolRegistry } from '@/features/mcp/mcp.repository';
+import { toolRegistry } from '../mcp/mcp.repository';
 
 const app = new Hono();
 

@@ -1,4 +1,4 @@
-import { Session } from '@/shared/middleware/auth';
+import { Session } from '../../shared/middleware/auth';
 import { GoogleTokens, GoogleUserInfo } from './user.dto';
 import * as userRepo from './user.repository';
 

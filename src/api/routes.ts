@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { authRouter } from '@/features/users/user.controller';
-import { chatRouter } from '@/features/conversations/conversation.controller';
-import { healthRouter } from '@/features/health/health.controller';
+import { authRouter } from '../features/users/user.controller';
+import { chatRouter } from '../features/conversations/conversation.controller';
+import { healthRouter } from '../features/health/health.controller';
 
 const apiRouter = new Hono();
 

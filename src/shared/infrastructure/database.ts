@@ -1,6 +1,6 @@
 import { Pool, QueryResult, PoolClient, QueryResultRow } from 'pg';
-import config from '@/shared/config';
-import logger from '@/shared/utils/logger';
+import config from '../config';
+import logger from '../utils/logger';
 
 const pool = new Pool(config.db);
 

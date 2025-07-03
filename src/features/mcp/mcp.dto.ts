@@ -1,4 +1,4 @@
-import { JsonSchema } from '@/shared/types/json-schema';
+import { JsonSchema } from '../../shared/types/json-schema';
 
 export interface McpServerConfig {
   name: string;

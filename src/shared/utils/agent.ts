@@ -1,6 +1,6 @@
-import { AgentConfig, AgentSystemConfig } from '@/shared/config/agents';
-import { mcpServers } from '@/shared/config/mcp';
-import logger from '@/shared/utils/logger';
+import { AgentConfig, AgentSystemConfig } from '../config/agents';
+import { mcpServers } from '../config/mcp';
+import logger from './logger';
 
 /**
  * Validates an agent configuration against available MCP servers

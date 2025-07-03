@@ -1,16 +1,16 @@
 import { Context, Next } from 'hono';
 import { getCookie } from 'hono/cookie';
-import logger from '@/shared/utils/logger';
+import logger from '../utils/logger';
 import { google } from 'googleapis';
-import { AgentFactory } from '@/features/agents/agent.factory';
-import { createAuthError } from '@/shared/utils/api-error';
-import { ErrorCodes } from '@/shared/utils/error-code';
-import { SessionService } from '@/features/users/user.service';
-import { UserService } from '@/features/users/user.service';
+import { AgentFactory } from '../../features/agents/agent.factory';
+import { createAuthError } from '../utils/api-error';
+import { ErrorCodes } from '../utils/error-code';
+import { SessionService } from '../../features/users/user.service';
+import { UserService } from '../../features/users/user.service';
 import {
   syncCalendarTask,
   syncGmailTask,
-} from '@/features/tasks/task.controller';
+} from '../../features/tasks/task.controller';
 
 export interface Session {
   id: string;

@@ -1,122 +1,179 @@
 import { Message } from './conversation.dto';
+import {
+  mastraMemoryService,
+  UserMemorySummary,
+} from '../agents/mastra.memory';
+import { safePreview } from './conversation.util';
+import logger from '../../shared/utils/logger';
 
-// Helper function to fix empty assistant messages that breaks the LLM
-// {
-//   "role": "assistant",
-//   "content": []
-// }
-function processMessage(message: Message): Message {
-  if (message.role === 'assistant' && Array.isArray(message.content)) {
-    // An array of content parts is considered empty if it's actually empty
-    // or only contains text parts with empty strings.
-    const isEmpty =
-      message.content.length === 0 ||
-      message.content.every(
-        part => part.type === 'text' && part.text.trim() === ''
-      );
+// Feature flag for gradual migration
+const USE_MASTRA = process.env.USE_MASTRA === 'true';
 
-    if (isEmpty) {
-      return {
-        ...message,
-        content: [
-          {
-            type: 'text',
-            text: ' ', // Use a space to ensure the content is not empty.
-          },
-        ],
-      };
-    }
+// Helper function to extract userId and threadId from session-based userId
+function parseUserSession(userId: string): {
+  userId: string;
+  threadId: string;
+} {
+  // If using new format with user and session IDs
+  const userSessionMatch = userId.match(/^user:([^:]+):session:(.+)$/);
+  if (userSessionMatch) {
+    return {
+      userId: userSessionMatch[1],
+      threadId: userSessionMatch[2],
+    };
   }
-  return message;
+
+  // Fallback: treat the entire string as session ID and use default user
+  return {
+    userId: 'default-user',
+    threadId: userId,
+  };
 }
 
-// Message history management class
+// Message history management class - Pure Mastra Memory wrapper
 class MessageHistory {
-  private history: Map<string, Message[]> = new Map();
-  private readonly maxMessages = 30;
-
-  /**
-   * Truncates the history for a given user if it exceeds the maximum number of messages.
-   * It ensures that the truncated history starts with a 'user' message to preserve
-   * conversation turns, while keeping the total message count at or below the maximum.
-   */
-  private truncateHistory(userId: string): void {
-    const userHistory = this.history.get(userId);
-    if (!userHistory || userHistory.length <= this.maxMessages) {
-      return;
-    }
-
-    const startIndex = userHistory.length - this.maxMessages;
-
-    // Find the first 'user' message at or after the start index to avoid
-    // cutting a conversation turn in the middle.
-    for (let i = startIndex; i < userHistory.length; i++) {
-      if (userHistory[i].role === 'user') {
-        // Found a safe place to start the history. Truncate everything before it.
-        userHistory.splice(0, i);
-        this.history.set(userId, userHistory);
-        return;
-      }
-    }
-
-    // Fallback: If no 'user' message was found in the last `maxMessages`
-    // messages (highly unlikely), truncate at the hard limit to prevent
-    // unbounded growth. This might break a turn but respects the memory limit.
-    userHistory.splice(0, startIndex);
-    this.history.set(userId, userHistory);
-  }
-
   /**
    * Get message history for a specific user
+   * Used for: Getting conversation history for display/context
    */
-  getHistory(userId: string): Message[] {
-    const messages = this.history.get(userId) || [];
-    // Process all messages to fix any empty assistant content
-    return messages.map(processMessage);
+  async getHistory(userId: string): Promise<Message[]> {
+    if (!USE_MASTRA) {
+      throw new Error(
+        'Legacy message history is no longer supported. Please enable Mastra with USE_MASTRA=true'
+      );
+    }
+
+    try {
+      const { userId: actualUserId, threadId } = parseUserSession(userId);
+      const { messages } = await mastraMemoryService.getUserMemory(
+        actualUserId,
+        threadId
+      );
+
+      // Convert Mastra messages to conversation messages
+      return messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      })) as Message[];
+    } catch (error) {
+      logger.error('Failed to get history from Mastra memory', {
+        error,
+        userId,
+      });
+      throw error;
+    }
   }
 
   /**
-   * Add a user message to the history
+   * Add an assistant message to the history
+   * ⚠️ ONLY use this for non-agent flows (e.g., RAG)
+   * For agent flows, messages are saved automatically by agent.stream()
    */
-  addUserMessage(userId: string, message: string): void {
-    const userHistory = this.getHistory(userId);
-    userHistory.push({ role: 'user', content: message });
-    this.history.set(userId, userHistory);
-    this.truncateHistory(userId);
-  }
+  async addAssistantMessage(userId: string, message: string): Promise<void> {
+    if (!USE_MASTRA) {
+      throw new Error(
+        'Legacy message history is no longer supported. Please enable Mastra with USE_MASTRA=true'
+      );
+    }
 
-  /**
-   * Add an assistant message to the history and maintain the limit
-   */
-  addAssistantMessage(userId: string, message: string): void {
-    const userHistory = this.getHistory(userId);
-    userHistory.push({ role: 'assistant', content: message });
-    this.history.set(userId, userHistory);
-    this.truncateHistory(userId);
-  }
-
-  /**
-   * Add tool call and tool result messages to the history
-   */
-  addToolMessages(userId: string, toolMessages: Message[]): void {
-    const userHistory = this.getHistory(userId);
-    // Process the incoming tool messages to fix any empty assistant content
-    const processedMessages = toolMessages.map(processMessage);
-    userHistory.push(...processedMessages);
-    this.history.set(userId, userHistory);
-    this.truncateHistory(userId);
+    try {
+      const { userId: actualUserId, threadId } = parseUserSession(userId);
+      await mastraMemoryService.saveAssistantMessage(
+        actualUserId,
+        threadId,
+        message
+      );
+    } catch (error) {
+      logger.error('Failed to save assistant message to Mastra memory', {
+        error,
+        userId,
+        message: safePreview(message, 50).preview,
+      });
+      throw error;
+    }
   }
 
   /**
    * Clear all history for a specific user
+   * Used for: Reset conversation functionality
    */
-  clearHistory(userId: string): void {
-    this.history.delete(userId);
+  async clearHistory(userId: string): Promise<void> {
+    if (!USE_MASTRA) {
+      throw new Error(
+        'Legacy message history is no longer supported. Please enable Mastra with USE_MASTRA=true'
+      );
+    }
+
+    try {
+      const { userId: actualUserId, threadId } = parseUserSession(userId);
+      await mastraMemoryService.clearUserMemory(actualUserId, threadId);
+    } catch (error) {
+      logger.error('Failed to clear history in Mastra memory', {
+        error,
+        userId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize user memory with Mastra
+   * Used for: Setting up new user sessions
+   */
+  async initializeUserMemory(userId: string, threadId: string): Promise<void> {
+    if (!USE_MASTRA) {
+      throw new Error(
+        'Legacy message history is no longer supported. Please enable Mastra with USE_MASTRA=true'
+      );
+    }
+
+    try {
+      await mastraMemoryService.initializeUserMemory(userId);
+      logger.debug('User memory initialized', { userId, threadId });
+    } catch (error) {
+      logger.error('Failed to initialize user memory', {
+        error,
+        userId,
+        threadId,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Get user memory summary
+   * Used for: Analytics and debugging
+   */
+  async getUserMemorySummary(
+    userId: string
+  ): Promise<UserMemorySummary | null> {
+    if (!USE_MASTRA) {
+      throw new Error(
+        'Legacy message history is no longer supported. Please enable Mastra with USE_MASTRA=true'
+      );
+    }
+
+    try {
+      const { userId: actualUserId } = parseUserSession(userId);
+      return await mastraMemoryService.getUserMemorySummary(actualUserId);
+    } catch (error) {
+      logger.error('Failed to get user memory summary', { error, userId });
+      return null;
+    }
+  }
+
+  /**
+   * Check if using Mastra memory system
+   * Used for: Feature flag checks
+   */
+  isUsingMastra(): boolean {
+    return USE_MASTRA;
   }
 }
 
 // Global message history instance
 const messageHistory = new MessageHistory();
 
-// Export the message history instance for external access if needed
+// Export the message history instance and types
 export { messageHistory };
+export type { Message };

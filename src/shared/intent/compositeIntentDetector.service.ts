@@ -1,8 +1,8 @@
-import logger from '@/shared/utils/logger';
+import logger from '../utils/logger';
 import type {
   IToolIntentDetector,
   ToolIntentResult,
-} from '@/features/intent/intentDetector.service';
+} from '../../features/intent/intentDetector.service';
 
 /**
  * Configuration for individual detectors in the composite.

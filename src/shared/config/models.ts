@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import logger from '@/shared/utils/logger';
+import logger from '../utils/logger';
 import { LanguageModelV1 } from 'ai';
 
 export type ModelProvider = 'anthropic' | 'openai' | 'google';

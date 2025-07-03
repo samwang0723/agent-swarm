@@ -1,7 +1,7 @@
 import { Tool } from 'ai';
 import { z } from 'zod';
-import logger from '@/shared/utils/logger';
-import type { ModelProvider } from '@/shared/config/models';
+import logger from '../../shared/utils/logger';
+import type { ModelProvider } from '../../shared/config/models';
 import {
   McpServerConfig,
   McpTool,
@@ -9,7 +9,7 @@ import {
   ToolsListResult,
   ToolCallResult,
 } from './mcp.dto';
-import { JsonSchema } from '@/shared/types/json-schema';
+import { JsonSchema } from '../../shared/types/json-schema';
 
 export class McpClient {
   private sessionId: string | null = null;
@@ -154,6 +154,37 @@ export class McpClient {
     }
 
     this.availableTools = (result.result as ToolsListResult)?.tools || [];
+
+    // Debug logging for schema analysis
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(`[DEBUG_MCP] Schema loading for ${this.config.name}:`);
+      this.availableTools.forEach(tool => {
+        logger.info(`[DEBUG_MCP] Tool: ${tool.name}`);
+        logger.info(`[DEBUG_MCP] Description: ${tool.description}`);
+        logger.info(
+          `[DEBUG_MCP] Input Schema:`,
+          JSON.stringify(tool.inputSchema, null, 2)
+        );
+
+        // Special attention to brave_web_search tool
+        if (tool.name === 'brave_web_search') {
+          logger.info(`[DEBUG_MCP] BRAVE_WEB_SEARCH SCHEMA ANALYSIS:`);
+          logger.info(`[DEBUG_MCP] - Type: ${tool.inputSchema?.type}`);
+          logger.info(
+            `[DEBUG_MCP] - Properties:`,
+            JSON.stringify(tool.inputSchema?.properties, null, 2)
+          );
+          logger.info(
+            `[DEBUG_MCP] - Required fields:`,
+            tool.inputSchema?.required
+          );
+          logger.info(
+            `[DEBUG_MCP] - Has query property: ${!!tool.inputSchema?.properties?.query}`
+          );
+        }
+      });
+    }
+
     logger.info(
       `Loaded ${this.availableTools.length} tools from ${this.config.name}:`,
       this.availableTools.map(t => t.name)
@@ -165,6 +196,16 @@ export class McpClient {
     parameters: Record<string, unknown>,
     requiresAuth?: boolean
   ): Promise<unknown> {
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(`[DEBUG_MCP] Tool execution started:`);
+      logger.info(`[DEBUG_MCP] - Tool name: ${name}`);
+      logger.info(
+        `[DEBUG_MCP] - Parameters:`,
+        JSON.stringify(parameters, null, 2)
+      );
+      logger.info(`[DEBUG_MCP] - Requires auth: ${requiresAuth}`);
+    }
+
     if (!this.sessionId) {
       throw new Error('MCP session not initialized');
     }
@@ -192,16 +233,26 @@ export class McpClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { name, arguments: parameters },
+      id: Date.now(),
+    };
+
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(
+        `[DEBUG_MCP] JSON-RPC payload:`,
+        JSON.stringify(payload, null, 2)
+      );
+      logger.info(`[DEBUG_MCP] Request headers:`, headers);
+    }
+
     try {
       const response = await fetch(this.config.url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'tools/call',
-          params: { name, arguments: parameters },
-          id: Date.now(),
-        }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(
           parseInt(process.env.MCP_TIMEOUT || '30000')
         ),
@@ -209,17 +260,51 @@ export class McpClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(
-          `Tool call failed: ${response.status} ${response.statusText} - ${errorText}`
-        );
+        const errorMessage = `Tool call failed: ${response.status} ${response.statusText} - ${errorText}`;
+
+        if (process.env.DEBUG_MCP === '1') {
+          logger.error(`[DEBUG_MCP] HTTP error during tool call:`, {
+            toolName: name,
+            parameters,
+            status: response.status,
+            statusText: response.statusText,
+            errorText,
+            payload,
+            headers,
+          });
+        }
+
+        throw new Error(errorMessage);
       }
 
       // Handle both JSON and SSE responses
       const responseText = await response.text();
+
+      if (process.env.DEBUG_MCP === '1') {
+        logger.info(`[DEBUG_MCP] Raw response from MCP server:`, responseText);
+      }
+
       const result = this.parseResponse(responseText);
 
+      if (process.env.DEBUG_MCP === '1') {
+        logger.info(
+          `[DEBUG_MCP] Parsed response:`,
+          JSON.stringify(result, null, 2)
+        );
+      }
+
       if (result.error) {
-        throw new Error(`Tool execution error: ${result.error.message}`);
+        const errorMessage = `Tool execution error: ${result.error.message}`;
+        if (process.env.DEBUG_MCP === '1') {
+          logger.error(`[DEBUG_MCP] Tool call failed:`, {
+            toolName: name,
+            parameters,
+            error: result.error,
+            payload,
+            responseText,
+          });
+        }
+        throw new Error(errorMessage);
       }
 
       // Handle MCP response format
@@ -241,31 +326,100 @@ export class McpClient {
       ) {
         const timeout = parseInt(process.env.MCP_TIMEOUT || '30000') / 1000;
         const errorMessage = `The tool call to '${name}' timed out after ${timeout} seconds. Please try again later.`;
+
+        if (process.env.DEBUG_MCP === '1') {
+          logger.error(`[DEBUG_MCP] Tool call timeout:`, {
+            toolName: name,
+            parameters,
+            timeout,
+            error: error.message,
+          });
+        }
+
         logger.error(errorMessage);
         return {
           error: errorMessage,
         };
       }
+
+      if (process.env.DEBUG_MCP === '1') {
+        logger.error(`[DEBUG_MCP] Unexpected error during tool call:`, {
+          toolName: name,
+          parameters,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+
       throw error;
     }
   }
 
   getAvailableTools(): Tool[] {
-    return this.availableTools.map(mcpTool => ({
-      description: mcpTool.description,
-      parameters: this.convertInputSchemaToZod(mcpTool.inputSchema),
-      execute: async parameters => {
-        return await this.callTool(
-          mcpTool.name,
-          parameters,
-          mcpTool.requiresAuth
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(
+        `[DEBUG_MCP] Converting ${this.availableTools.length} MCP tools to AI tools`
+      );
+    }
+
+    return this.availableTools.map(mcpTool => {
+      const zodSchema = this.convertInputSchemaToZod(mcpTool.inputSchema);
+
+      if (process.env.DEBUG_MCP === '1') {
+        logger.info(`[DEBUG_MCP] Registering tool: ${mcpTool.name}`);
+        logger.info(`[DEBUG_MCP] - Description: ${mcpTool.description}`);
+        logger.info(
+          `[DEBUG_MCP] - Original schema:`,
+          JSON.stringify(mcpTool.inputSchema, null, 2)
         );
-      },
-    }));
+        logger.info(
+          `[DEBUG_MCP] - Zod schema applied: ${zodSchema.constructor.name}`
+        );
+
+        // Special logging for brave_web_search
+        if (mcpTool.name === 'brave_web_search') {
+          logger.info(`[DEBUG_MCP] BRAVE_WEB_SEARCH TOOL REGISTRATION:`);
+          logger.info(
+            `[DEBUG_MCP] - Schema type: ${mcpTool.inputSchema?.type}`
+          );
+          logger.info(
+            `[DEBUG_MCP] - Has query in properties: ${!!mcpTool.inputSchema?.properties?.query}`
+          );
+          logger.info(
+            `[DEBUG_MCP] - Query is required: ${mcpTool.inputSchema?.required?.includes('query')}`
+          );
+        }
+      }
+
+      return {
+        description: mcpTool.description,
+        parameters: zodSchema,
+        execute: async parameters => {
+          return await this.callTool(
+            mcpTool.name,
+            parameters,
+            mcpTool.requiresAuth
+          );
+        },
+      };
+    });
   }
 
   private convertInputSchemaToZod(schema: JsonSchema): z.ZodType {
+    if (process.env.DEBUG_MCP === '1') {
+      logger.info(
+        `[DEBUG_MCP] Schema conversion input:`,
+        JSON.stringify(schema, null, 2)
+      );
+    }
+
     if (!schema || !schema.type) {
+      if (process.env.DEBUG_MCP === '1') {
+        logger.warn(
+          `[DEBUG_MCP] Invalid schema - falling back to z.any():`,
+          schema
+        );
+      }
       // Return a default schema if the input is invalid
       return z.any();
     }
@@ -303,8 +457,16 @@ export class McpClient {
         }
         return z.array(z.any()).describe(schema.description || ''); // Fallback for arrays with no item schema
       default:
+        if (process.env.DEBUG_MCP === '1') {
+          logger.warn(
+            `[DEBUG_MCP] Unknown schema type '${schema.type}' - falling back to z.any()`
+          );
+        }
         return z.any(); // Fallback for unknown types
     }
+
+    // Note: We can't easily log the resulting Zod schema as it's not serializable,
+    // but we can log when we successfully convert specific types
   }
 
   getToolNames(): string[] {

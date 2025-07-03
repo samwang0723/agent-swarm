@@ -132,3 +132,345 @@ The file `src/shared/config/index.ts` holds general configuration for the applic
 - `TEMPORAL_TASK_QUEUE`: Default task queue name.
 - `TEMPORAL_CONNECT_TIMEOUT`: Connection timeout in ms.
 - `TEMPORAL_RPC_TIMEOUT`: RPC timeout in ms.
+
+# Mastra Configuration
+
+This directory contains the Mastra framework configuration for the agent system. Mastra provides persistent memory, agent orchestration, and tool management capabilities.
+
+## Configuration Files
+
+### `mastra.ts`
+
+Main Mastra configuration file that sets up:
+
+- **Memory System**: User-scoped persistent memory with working memory for preferences
+- **Agent Options**: Default settings for Mastra agents
+- **Memory Patterns**: Consistent resource and thread ID patterns
+- **Best Practices**: Guidelines for using Mastra effectively
+
+## Key Components
+
+### Memory System
+
+```typescript
+// Create Mastra memory instance
+const memory = createMastraMemory();
+
+// User-scoped resource and thread patterns
+const resourceId = memoryPatterns.getResourceId(userId); // "user:123"
+const threadId = memoryPatterns.getThreadId(sessionId); // "session:abc"
+```
+
+**Features:**
+
+- ✅ User-scoped persistent memory
+- ✅ Working memory for user preferences and context
+- ✅ Structured data with Zod schemas
+- ✅ Automatic cleanup and retention policies
+
+### Working Memory Schema
+
+Structured user profile data stored persistently:
+
+```typescript
+interface UserProfileSchema {
+  name?: string;
+  location?: string;
+  timezone?: string;
+  preferences: {
+    communicationStyle?: 'formal' | 'casual' | 'technical';
+    projectGoal?: string;
+    preferredLanguage?: string;
+    // ... more preferences
+  };
+  sessionState: {
+    lastTaskDiscussed?: string;
+    openQuestions?: string[];
+    currentContext?: string;
+    lastAgentUsed?: string;
+  };
+}
+```
+
+### Memory Patterns
+
+Consistent patterns for resource and thread identification:
+
+- **User Scope**: `user:{userId}` - Persistent across all sessions
+- **Thread Scope**: `session:{sessionId}` - Conversation-specific context
+- **Organization Scope**: `org:{orgId}:user:{userId}` - Multi-tenant support
+
+## Best Practices
+
+### 1. Memory Design
+
+**✅ Do:**
+
+- Use Zod schemas for structured data
+- Keep working memory structure flat and simple
+- Use consistent naming conventions
+- Scope memory to users for data isolation
+
+**❌ Don't:**
+
+- Store large amounts of data in working memory
+- Use complex nested structures
+- Mix different data types in the same fields
+
+### 2. Agent Configuration
+
+**✅ Do:**
+
+- Always scope agents to users
+- Use descriptive resource and thread IDs
+- Enable automatic cleanup
+- Monitor memory usage
+
+**❌ Don't:**
+
+- Share agents between users
+- Use generic or unclear identifiers
+- Forget to clean up inactive sessions
+
+### 3. Tool Integration
+
+**✅ Do:**
+
+- Update working memory when tools provide relevant context
+- Use structured data for tool results
+- Log tool usage for debugging
+- Handle errors gracefully
+
+**❌ Don't:**
+
+- Store sensitive data in working memory
+- Update memory on every tool call
+- Ignore memory update failures
+
+## Usage Examples
+
+### Basic Setup
+
+```typescript
+import { createMastraMemory, memoryPatterns } from '@/shared/config/mastra';
+
+// Create memory instance
+const memory = createMastraMemory();
+
+// Create memory config for user
+const memoryConfig = {
+  resourceId: memoryPatterns.getResourceId(userId),
+  threadId: memoryPatterns.getThreadId(sessionId),
+};
+```
+
+### Agent Creation
+
+```typescript
+import { defaultAgentOptions } from '@/shared/config/mastra';
+
+const agent = new Agent({
+  name: 'user-assistant',
+  instructions: 'You are a helpful assistant...',
+  model: defaultAgentOptions.model,
+  memory: {
+    userId,
+    resourceId: memoryPatterns.getResourceId(userId),
+  },
+});
+```
+
+### Working Memory Updates
+
+```typescript
+// Update user preferences
+await memory.updateWorkingMemory(
+  {
+    threadId: memoryPatterns.getThreadId(sessionId),
+    resourceId: memoryPatterns.getResourceId(userId),
+  },
+  {
+    preferences: {
+      communicationStyle: 'technical',
+      preferredLanguage: 'en',
+    },
+  }
+);
+
+// Update session state
+await memory.updateWorkingMemory(
+  {
+    threadId: memoryPatterns.getThreadId(sessionId),
+    resourceId: memoryPatterns.getResourceId(userId),
+  },
+  {
+    sessionState: {
+      lastTaskDiscussed: 'API optimization',
+      currentContext: 'technical-discussion',
+    },
+  }
+);
+```
+
+## Memory Monitoring
+
+The configuration includes utilities for monitoring memory usage:
+
+```typescript
+import { memoryMonitoring } from '@/shared/config/mastra';
+
+// Get current memory stats
+const stats = memoryMonitoring.getMemoryStats();
+
+// Log memory usage
+memoryMonitoring.logMemoryUsage('agent-creation');
+
+// Check memory limits
+const withinLimits = memoryMonitoring.checkMemoryLimits(1024); // 1GB limit
+```
+
+## Configuration Options
+
+### Memory Settings
+
+```typescript
+export const mastraConfig = {
+  memory: {
+    enableAutoCleanup: true,
+    cleanupIntervalHours: 24,
+    batchSize: 100,
+    maxConcurrentOperations: 10,
+  },
+  agents: {
+    defaultTimeoutMs: 30000,
+    maxAgentsPerUser: 10,
+    enableAgentPersistence: true,
+  },
+  features: {
+    enableWorkingMemory: true,
+    enableCrossSessionMemory: true,
+  },
+};
+```
+
+### Working Memory Templates
+
+Pre-defined templates for different use cases:
+
+- `userProfile`: Basic user information and preferences
+- `businessContext`: Company and project information
+- `technicalContext`: Development environment and preferences
+
+## Migration Notes
+
+### From Session-Based to User-Scoped Memory
+
+The system has migrated from session-based memory to user-scoped persistent memory:
+
+**Before:**
+
+- Memory tied to sessions
+- Lost on session end
+- No cross-session context
+
+**After:**
+
+- Memory tied to users
+- Persistent across sessions
+- Rich working memory with preferences
+- Structured data with schemas
+
+### Memory Storage
+
+Mastra Memory handles storage automatically. The configuration uses:
+
+- In-memory storage for development
+- Configurable storage adapters for production
+- Working memory for structured user data
+- Automatic cleanup and retention
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Memory not persisting**
+
+   - Check resource and thread ID patterns
+   - Verify user ID is consistent
+   - Ensure memory configuration is valid
+
+2. **High memory usage**
+
+   - Monitor with `memoryMonitoring.logMemoryUsage()`
+   - Check cleanup settings
+   - Review working memory size
+
+3. **Schema validation errors**
+   - Verify data matches `userProfileSchema`
+   - Check for required fields
+   - Validate data types
+
+### Debug Logging
+
+Enable debug logging in development:
+
+```typescript
+// Set LOG_LEVEL=debug in environment
+const config = {
+  development: {
+    enableDebugLogs: true,
+    enableMemoryInspection: true,
+  },
+};
+```
+
+## Performance Considerations
+
+### Optimization Tips
+
+1. **Memory Efficiency**
+
+   - Use structured data over free-form text
+   - Implement cleanup schedules
+   - Monitor memory usage regularly
+   - Use batch operations for multiple updates
+
+2. **Agent Performance**
+
+   - Cache agents per user
+   - Implement connection pooling
+   - Use appropriate timeouts
+   - Monitor agent lifecycle
+
+3. **Scaling Considerations**
+   - Plan for multiple users
+   - Implement proper cleanup
+   - Use monitoring and alerting
+   - Consider memory limits per user
+
+## Security
+
+### Data Protection
+
+- Working memory may contain personal preferences
+- Resource IDs isolate user data
+- No sensitive data in working memory
+- Proper cleanup of inactive sessions
+- Audit logging for memory operations
+
+### Access Control
+
+- User-scoped resource patterns prevent data leakage
+- Thread-based isolation for conversations
+- Proper validation of memory configurations
+- Error handling without data exposure
+
+## Future Enhancements
+
+Planned improvements:
+
+- [ ] Vector search integration for semantic memory
+- [ ] Cross-agent memory sharing with permissions
+- [ ] Memory compression for long-term storage
+- [ ] Advanced analytics on memory usage
+- [ ] Integration with external storage systems

@@ -1,6 +1,6 @@
-import { query } from '@/shared/infrastructure/database';
+import { query } from '../../shared/infrastructure/database';
 import { StoredSession } from './user.dto';
-import { Session } from '@/shared/middleware/auth';
+import { Session } from '../../shared/middleware/auth';
 
 export interface User {
   id: string; // uuid

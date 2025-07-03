@@ -1,8 +1,8 @@
 import type {
   IToolIntentDetector,
   ToolIntentResult,
-} from '@/features/intent/intentDetector.service';
-import logger from '@/shared/utils/logger';
+} from '../../features/intent/intentDetector.service';
+import logger from '../utils/logger';
 
 /**
  * Keyword-based implementation of tool intent detection.

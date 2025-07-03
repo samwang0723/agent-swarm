@@ -1,7 +1,6 @@
-import { Agent, createTool } from '@mastra/core';
-import { Tool } from 'ai';
 import { z } from 'zod';
 import { Memory } from '@mastra/memory';
+import { Agent, createTool, Tool } from '@mastra/core';
 import { AgentConfig, AgentSystemConfig } from '../../shared/config/agents';
 import logger from '../../shared/utils/logger';
 import { toolRegistry } from '../mcp/mcp.repository';
@@ -17,7 +16,6 @@ import {
   createMastraMemory,
   createAgentMemoryConfig,
 } from '../../shared/config/mastra';
-import { convertMultiServerMcpToolsToMastraTools } from './mastra.adapter';
 
 // Define the correct type for Mastra tools as returned by createTool
 type MastraToolResult = ReturnType<typeof createTool>;
@@ -203,14 +201,15 @@ export class AgentRegistry {
           systemPrompt + (agentConfig.additionalInstructions || '');
 
         // Collect and convert tools from MCP servers
-        const serverToolsMap: Record<string, Record<string, Tool>> = {};
+        const serverToolsMap: Record<string, Tool<z.ZodType>> = {};
         agentConfig.mcpServers.forEach(serverName => {
-          serverToolsMap[serverName] = toolRegistry.getServerTools(
-            serverName
-          ) as Record<string, Tool>;
+          const serverTools = toolRegistry.getServerTools(serverName);
+          Object.entries(serverTools).forEach(([toolName, tool]) => {
+            // Use server prefix to prevent conflicts
+            const prefixedName = `${serverName}_${toolName}`;
+            serverToolsMap[prefixedName] = tool;
+          });
         });
-        const mastraTools =
-          convertMultiServerMcpToolsToMastraTools(serverToolsMap);
 
         const modelInstance = createModelByKey(agentConfig.model);
         if (!modelInstance) {
@@ -244,7 +243,7 @@ export class AgentRegistry {
           name: agentConfig.id,
           instructions: fullPrompt,
           model: modelInstance,
-          tools: mastraTools,
+          tools: serverToolsMap,
           memory: this.memory, // Pass the actual Memory instance, not config
         });
 
@@ -364,13 +363,12 @@ export class AgentRegistry {
     }
 
     // Mastra receptionist agent with workflow orchestration
-    const handoverTools = Array.from(this.handoverTools.values());
-
-    logger.debug('Pre-receptionist creation memory validation:', {
-      hasMemory: !!this.memory,
-      memoryType: typeof this.memory,
-      memoryConstructor: this.memory ? this.memory.constructor.name : 'none',
-    });
+    const handoverTools = Object.fromEntries(
+      Array.from(this.handoverTools.entries()).map(([key, value]) => [
+        key,
+        value as Tool<z.ZodType>,
+      ])
+    );
 
     this.receptionistAgent = createBasicMastraAgent({
       name: this.config.receptionist.name,
@@ -383,14 +381,6 @@ export class AgentRegistry {
     // Validate receptionist was created with memory
     const receptionistMemory = (this.receptionistAgent as { memory?: Memory })
       .memory;
-    logger.debug('Post-receptionist creation memory validation:', {
-      receptionistHasMemory: !!receptionistMemory,
-      receptionistMemoryType: typeof receptionistMemory,
-      receptionistMemoryConstructor: receptionistMemory
-        ? receptionistMemory.constructor.name
-        : 'none',
-      receptionistMemoryIsSameInstance: receptionistMemory === this.memory,
-    });
 
     if (!receptionistMemory) {
       logger.error('⚠️  Receptionist agent was created without memory!', {
@@ -401,7 +391,7 @@ export class AgentRegistry {
 
     this.createReceptionistWorkflow();
     logger.info(
-      `✅ Mastra receptionist agent created with ${handoverTools.length} handover tools and workflow orchestration`,
+      `✅ Mastra receptionist agent created with ${this.handoverTools.size} handover tools and workflow orchestration`,
       {
         hasMemory: !!receptionistMemory,
         memoryAttached: receptionistMemory === this.memory,

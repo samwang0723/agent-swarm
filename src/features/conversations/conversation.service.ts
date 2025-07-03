@@ -22,7 +22,6 @@ import type {
   IToolIntentDetector,
   ToolIntentResult,
 } from '../intent/intentDetector.service';
-import { toolRegistry } from '../mcp/mcp.repository';
 
 // Create a singleton intent detector instance using composite pattern for best accuracy
 const createIntentDetector = (): IToolIntentDetector => {
@@ -196,27 +195,7 @@ async function handleSwarmStream(
     outputStrategy.onStart?.({ sessionId: session.id, streaming: true });
 
     // Use Mastra workflow orchestration
-    const orchestration = await getOrCreateUserOrchestration(session, model);
-
-    // Debug logging for agent tool availability
-    if (process.env.DEBUG_MCP === '1') {
-      logger.info(
-        `[DEBUG_MCP] Agent orchestration loaded for session ${session.id}`
-      );
-      logger.info(
-        `[DEBUG_MCP] - Available agents:`,
-        Object.keys(orchestration.agents)
-      );
-      logger.info(
-        `[DEBUG_MCP] - Receptionist agent available:`,
-        !!orchestration.receptionistAgent
-      );
-      logger.info(`[DEBUG_MCP] - Intent result:`, {
-        requiresTools: intentResult.requiresTools,
-        detectedTools: intentResult.detectedTools,
-        confidence: intentResult.confidence,
-      });
-    }
+    const orchestration = await getOrCreateUserOrchestration(session);
 
     // Extract memory context from orchestration
     memoryContext = orchestration.memoryContext;
@@ -264,84 +243,6 @@ async function handleSwarmStream(
     // Type the agent properly for Mastra stream API
     const agent = targetAgent;
 
-    // Debug logging for tool registry status
-    if (process.env.DEBUG_MCP === '1') {
-      logger.info(`[DEBUG_MCP] Tool registry status check:`);
-
-      // Get tool registry status
-      const toolsByServer = toolRegistry.getToolsByServerMap();
-      const totalTools = Object.values(toolsByServer).reduce(
-        (total, serverTools) => total + Object.keys(serverTools).length,
-        0
-      );
-
-      logger.info(
-        `[DEBUG_MCP] - Total MCP servers: ${Object.keys(toolsByServer).length}`
-      );
-      logger.info(`[DEBUG_MCP] - Total tools registered: ${totalTools}`);
-      logger.info(
-        `[DEBUG_MCP] - Servers and tool counts:`,
-        Object.entries(toolsByServer).map(([server, tools]) => ({
-          server,
-          toolCount: Object.keys(tools).length,
-          tools: Object.keys(tools),
-        }))
-      );
-
-      // Check for web search tools specifically
-      const webSearchTools = Object.entries(toolsByServer).flatMap(
-        ([server, tools]) =>
-          Object.keys(tools)
-            .filter(
-              toolName =>
-                toolName.includes('search') ||
-                toolName.includes('web') ||
-                toolName.includes('brave')
-            )
-            .map(toolName => `${server}:${toolName}`)
-      );
-
-      logger.info(`[DEBUG_MCP] - Web search tools available:`, webSearchTools);
-
-      // Check connection status for each server
-      Object.keys(toolsByServer).forEach(serverName => {
-        const serverTools = toolRegistry.getServerTools(serverName);
-        logger.info(
-          `[DEBUG_MCP] - Server ${serverName} status: ${Object.keys(serverTools).length > 0 ? 'connected' : 'disconnected'}`
-        );
-      });
-    }
-
-    // Debug logging before agent.stream() call
-    if (process.env.DEBUG_MCP === '1') {
-      logger.info(`[DEBUG_MCP] Pre-agent stream execution:`);
-      logger.info(`[DEBUG_MCP] - Selected agent: ${selectedAgentId}`);
-      logger.info(
-        `[DEBUG_MCP] - Agent has stream method: ${typeof agent.stream === 'function'}`
-      );
-      logger.info(`[DEBUG_MCP] - Memory context:`, {
-        resourceId: memoryContext.resourceId,
-        threadId: memoryContext.threadId,
-      });
-      logger.info(
-        `[DEBUG_MCP] - Augmented message length: ${augmentedMessage.length}`
-      );
-      logger.info(
-        `[DEBUG_MCP] - Augmented message preview:`,
-        augmentedMessage.substring(0, 200) + '...'
-      );
-    }
-
-    logger.debug(`[${session.id}] Calling agent.stream() with memory context`, {
-      sessionId: session.id,
-      selectedAgentId,
-      memoryContext: {
-        resourceId: memoryContext.resourceId,
-        threadId: memoryContext.threadId,
-      },
-      messageLength: augmentedMessage.length,
-    });
-
     // Use the augmented message (with RAG context) for the agent
     // Mastra agents handle conversation history automatically through memory
     // Pass memory context as second parameter for proper tool execution
@@ -356,42 +257,6 @@ async function handleSwarmStream(
       outputStrategy
     );
 
-    // Debug logging for stream result
-    if (process.env.DEBUG_MCP === '1') {
-      logger.info(`[DEBUG_MCP] Agent stream execution completed:`);
-      logger.info(`[DEBUG_MCP] - Stream completed successfully: true`);
-      logger.info(`[DEBUG_MCP] - Final text length: ${finalText.length}`);
-      logger.info(
-        `[DEBUG_MCP] - Final text preview:`,
-        finalText.substring(0, 200) + '...'
-      );
-
-      // Check if any tool calls were mentioned in the response
-      const toolCallPatterns = [
-        /tool.*call/i,
-        /executing.*tool/i,
-        /calling.*function/i,
-        /search.*result/i,
-        /web.*search/i,
-        /brave.*search/i,
-      ];
-
-      const toolCallsDetected = toolCallPatterns.some(pattern =>
-        pattern.test(finalText)
-      );
-      logger.info(
-        `[DEBUG_MCP] - Tool calls detected in response: ${toolCallsDetected}`
-      );
-
-      if (toolCallsDetected) {
-        logger.info(`[DEBUG_MCP] - Response suggests tool execution occurred`);
-      } else {
-        logger.warn(
-          `[DEBUG_MCP] - No tool execution patterns found in response`
-        );
-      }
-    }
-
     outputStrategy.onFinish?.({ complete: true, sessionId: session.id });
 
     // Get updated messages from Mastra memory
@@ -405,23 +270,6 @@ async function handleSwarmStream(
       newMessage: finalText,
     };
   } catch (error) {
-    if (process.env.DEBUG_MCP === '1') {
-      logger.error(`[DEBUG_MCP] Agent stream execution failed:`, {
-        sessionId: session.id,
-        selectedAgentId: selectedAgentId || 'unknown',
-        intentResult,
-        augmentedMessageLength: augmentedMessage.length,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        memoryContext: memoryContext
-          ? {
-              resourceId: memoryContext.resourceId,
-              threadId: memoryContext.threadId,
-            }
-          : 'not available',
-      });
-    }
-
     logger.error('sendMessage with agent orchestration:', error);
     const errorMessage =
       error instanceof Error ? error.message : safePreview(error, 500).preview;

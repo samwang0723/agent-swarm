@@ -194,7 +194,7 @@ app.delete('/history', requireAuth, c => {
  */
 app.post('/init', requireAuth, c => {
   const user = c.get('user');
-  initializeSwarm(user, model);
+  initializeSwarm(user);
   return c.json({ success: true, message: 'Swarm initialized' });
 });
 

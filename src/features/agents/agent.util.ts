@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { createTool, Agent } from '@mastra/core';
+import { createTool, Agent, Tool } from '@mastra/core';
 import { z } from 'zod';
 import { LanguageModelV1 } from 'ai';
 import { Memory } from '@mastra/memory';
@@ -113,7 +113,7 @@ export function createBasicMastraAgent(config: {
   name: string;
   instructions: string;
   model: LanguageModelV1;
-  tools?: ReturnType<typeof createTool>[];
+  tools?: Record<string, Tool<z.ZodType>>;
   memory?: Memory; // Mastra Memory instance
 }): Agent {
   try {
@@ -124,44 +124,10 @@ export function createBasicMastraAgent(config: {
       );
     }
 
-    // Log agent creation details for debugging
-    logger.debug(`Creating Mastra agent: ${config.name}`, {
-      hasModel: !!config.model,
-      hasMemory: !!config.memory,
-      hasTools: !!config.tools,
-      toolsCount: config.tools
-        ? Array.isArray(config.tools)
-          ? config.tools.length
-          : 'non-array'
-        : 0,
-      memoryType: config.memory ? typeof config.memory : 'undefined',
-      modelType: config.model
-        ? {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            modelId: (config.model as any).modelId,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            provider: (config.model as any).provider,
-          }
-        : 'undefined',
-    });
-
     // Validate memory instance if provided
     if (config.memory) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const memoryInstance = config.memory as any;
-      logger.debug(`Agent ${config.name}: Validating memory instance`, {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        memoryConstructor: memoryInstance.constructor?.name || 'unknown',
-        memoryMethods: Object.keys(memoryInstance).slice(0, 10), // First 10 methods
-        hasCreateThread: !!memoryInstance.createThread,
-        hasQuery: !!memoryInstance.query,
-        hasGetThreadById: !!memoryInstance.getThreadById,
-        hasGetThreadsByResourceId: !!memoryInstance.getThreadsByResourceId,
-        memoryType: typeof memoryInstance,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        memoryInstanceId: memoryInstance.id || 'no-id',
-      });
-
       if (!memoryInstance.createThread || !memoryInstance.query) {
         logger.warn(
           `Agent ${config.name}: Memory instance missing required methods`,
@@ -181,25 +147,12 @@ export function createBasicMastraAgent(config: {
       );
     }
 
-    // Convert tools array to a record if it exists
-    const toolsRecord = config.tools?.reduce(
-      (acc, tool) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const toolId = (tool as any).id;
-        if (toolId) {
-          acc[toolId] = tool;
-        }
-        return acc;
-      },
-      {} as Record<string, ReturnType<typeof createTool>>
-    );
-
     // Create the agent with proper type casting
     const agent = new Agent({
       name: config.name,
       instructions: config.instructions,
       model: config.model,
-      tools: toolsRecord,
+      tools: config.tools,
       memory: config.memory,
     });
 
@@ -213,17 +166,6 @@ export function createBasicMastraAgent(config: {
     // Validate memory attachment after agent creation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentMemory = (agent as any).memory;
-    logger.debug(`Agent ${config.name} memory attachment validation:`, {
-      originalMemoryProvided: !!config.memory,
-      originalMemoryType: config.memory ? typeof config.memory : 'undefined',
-      agentMemoryAttached: !!agentMemory,
-      agentMemoryType: agentMemory ? typeof agentMemory : 'undefined',
-      memoryIsSameInstance:
-        config.memory && agentMemory ? agentMemory === config.memory : false,
-      agentMemoryConstructor: agentMemory
-        ? agentMemory.constructor.name
-        : 'none',
-    });
 
     // Critical check for memory attachment
     if (config.memory && !agentMemory) {

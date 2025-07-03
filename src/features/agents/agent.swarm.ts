@@ -1,4 +1,3 @@
-import { LanguageModelV1 } from 'ai';
 import { Agent as MastraAgent } from '@mastra/core';
 import {
   MastraMemoryContext,
@@ -26,7 +25,6 @@ const INACTIVE_THRESHOLD_MS = 60 * 60 * 1000; // 1 hour
 async function createUserOrchestration(
   userId: string,
   sessionId: string,
-  model: LanguageModelV1,
   accessToken?: string
 ): Promise<UserOrchestration> {
   try {
@@ -120,8 +118,7 @@ async function createUserOrchestration(
  * Main entry point for user agent management
  */
 export async function getOrCreateUserOrchestration(
-  session: Session,
-  model: LanguageModelV1
+  session: Session
 ): Promise<UserOrchestration> {
   const userId = session.id;
   if (!userId) {
@@ -137,7 +134,6 @@ export async function getOrCreateUserOrchestration(
     orchestration = await createUserOrchestration(
       userId,
       session.id,
-      model,
       session.accessToken
     );
 
@@ -285,8 +281,7 @@ export async function processUserMessage(
  * Useful for reducing first-message latency
  */
 export async function initializeUserOrchestration(
-  session: Session,
-  model: LanguageModelV1
+  session: Session
 ): Promise<void> {
   const userId = session.id;
   if (!userId) {
@@ -298,7 +293,7 @@ export async function initializeUserOrchestration(
     logger.info(`Pre-warming orchestration for user ${userId}`);
 
     try {
-      await getOrCreateUserOrchestration(session, model);
+      await getOrCreateUserOrchestration(session);
     } catch (error) {
       logger.error(
         `Failed to pre-warm orchestration for user ${userId}:`,

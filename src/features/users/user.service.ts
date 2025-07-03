@@ -72,33 +72,26 @@ export class UserService {
 }
 
 export class SessionService {
-  // Temporary storage for user sessions
-  // In production, use Redis or a database
-  private sessions = new Map<string, Session>();
-
   public async createSession(
     token: string,
     session: Session,
     expirationSeconds: number
   ): Promise<void> {
-    this.sessions.set(token, session);
-
-    // Set expiration
-    setTimeout(() => {
-      this.sessions.delete(token);
-    }, expirationSeconds * 1000);
+    const expiresAt = new Date(Date.now() + expirationSeconds * 1000);
+    await userRepo.createSession(token, session.id, session, expiresAt);
   }
 
   public async getSession(token: string): Promise<Session | null> {
-    return this.sessions.get(token) || null;
+    const storedSession = await userRepo.getSessionById(token);
+    return storedSession?.data || null;
   }
 
   public async updateSession(token: string, session: Session): Promise<void> {
-    this.sessions.set(token, session);
+    await userRepo.updateSession(token, session);
   }
 
   public async deleteSession(token: string): Promise<void> {
-    this.sessions.delete(token);
+    await userRepo.deleteSessionById(token);
   }
 }
 

@@ -245,17 +245,21 @@ export class KeywordIntentDetector implements IToolIntentDetector {
     };
 
     if (requiresTools) {
-      logger.info(`[KeywordIntentDetector] Tool intent detected:`, {
-        transcript:
-          transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''),
-        detectedTools,
-        confidence,
-        totalMatches,
-      });
+      logger.info(
+        `[KeywordIntentDetector] Tool intent detected: ${
+          transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
+        }`,
+        {
+          detectedTools,
+          confidence,
+          totalMatches,
+        }
+      );
     } else {
       logger.info(
-        `[KeywordIntentDetector] No tool intent detected for transcript:`,
-        transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
+        `[KeywordIntentDetector] No tool intent detected for transcript: ${
+          transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
+        }`
       );
     }
 

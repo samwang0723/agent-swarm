@@ -112,21 +112,36 @@ class MastraMemoryService {
     workingMemory?: UserProfileSchema;
   }> {
     try {
-      const config = this.getMemoryConfig(userId, threadId);
-
-      // Get working memory (user profile and preferences)
-      const workingMemory = await this.memory.getWorkingMemory({
-        threadId: config.thread,
-        resourceId: config.resource,
+      const threadId = memoryPatterns.getThreadId(userId);
+      const { messagesV2, uiMessages } = await this.memory.query({
+        threadId,
+        selectBy: {
+          last: 50,
+        },
       });
-
-      // For now, return empty messages as the new Memory API doesn't have getMessages
-      // TODO: Implement proper message retrieval when Mastra adds this functionality
-      const messages: Message[] = [];
+      const mappedMessages = uiMessages
+        .map(msg => {
+          const role = msg.role;
+          if (role === 'user' || role === 'assistant') {
+            return {
+              role: role,
+              content: msg.content,
+              timestamp: msg.createdAt,
+            };
+          }
+          if (role === 'data') {
+            return {
+              role: 'tool' as const,
+              content: msg.content,
+              timestamp: msg.createdAt,
+            };
+          }
+          return null;
+        })
+        .filter((m): m is NonNullable<typeof m> => m !== null);
 
       return {
-        messages,
-        workingMemory: workingMemory as UserProfileSchema,
+        messages: mappedMessages,
       };
     } catch (error) {
       logger.error('Failed to get user memory', {
@@ -259,13 +274,9 @@ class MastraMemoryService {
    */
   async clearUserMemory(userId: string, threadId: string): Promise<void> {
     try {
-      const config = this.getMemoryConfig(userId, threadId);
-
+      const threadId = memoryPatterns.getThreadId(userId);
       // Clear working memory for this thread
-      await this.memory.getWorkingMemory({
-        threadId: config.thread,
-        resourceId: config.resource,
-      });
+      await this.memory.deleteThread(threadId);
 
       logger.info('User memory cleared', { userId, threadId });
     } catch (error) {

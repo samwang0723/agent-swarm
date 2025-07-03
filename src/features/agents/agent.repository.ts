@@ -26,14 +26,12 @@ export class AgentRegistry {
   private receptionistAgent: Agent | null = null;
   private receptionistWorkflow: unknown = null;
   private memory: Memory | undefined;
-  private useMastra: boolean;
 
   constructor(
     private config: AgentSystemConfig,
     private accessToken?: string,
     private userId?: string
   ) {
-    this.useMastra = process.env.USE_MASTRA === 'true';
     this.validateConfiguration();
     this.initializeMemory();
     this.initializeRegistry();
@@ -59,8 +57,6 @@ export class AgentRegistry {
   }
 
   private initializeMemory(): void {
-    if (!this.useMastra) return;
-
     try {
       logger.info('Starting Mastra memory initialization...');
       this.memory = createMastraMemory();
@@ -144,12 +140,6 @@ export class AgentRegistry {
   }
 
   private initializeRegistry(): void {
-    if (!this.useMastra) {
-      throw new Error(
-        'Mastra must be enabled for agent registry initialization'
-      );
-    }
-
     logger.info('Initializing agent registry...');
 
     // Set access token if provided
@@ -535,7 +525,6 @@ export class AgentRegistry {
     enabled: number;
     disabled: number;
     agents: { id: string; name: string; enabled: boolean }[];
-    useMastra: boolean;
   } {
     const agents = this.config.agents.map(c => ({
       id: c.id,
@@ -547,12 +536,11 @@ export class AgentRegistry {
       enabled: agents.filter(a => a.enabled).length,
       disabled: agents.filter(a => !a.enabled).length,
       agents,
-      useMastra: this.useMastra,
     };
   }
 
   public getMemoryService() {
-    return this.useMastra ? mastraMemoryService : null;
+    return mastraMemoryService;
   }
 
   public async initializeAgentMemory(
@@ -560,7 +548,6 @@ export class AgentRegistry {
     userId: string,
     sessionId: string
   ): Promise<void> {
-    if (!this.useMastra) return;
     try {
       await mastraMemoryService.initializeUserMemory(userId);
       logger.debug(
@@ -576,7 +563,7 @@ export class AgentRegistry {
     userId: string,
     sessionId: string
   ): Promise<MastraMemoryContext | null> {
-    if (!this.useMastra || !userId) return null;
+    if (!userId) return null;
     try {
       const memoryCfg = createAgentMemoryConfig(userId, sessionId);
       return {
@@ -588,10 +575,6 @@ export class AgentRegistry {
       logger.error('Failed to get agent memory context:', error);
       return null;
     }
-  }
-
-  public isMastraEnabled(): boolean {
-    return this.useMastra;
   }
 
   public getUserId(): string | undefined {

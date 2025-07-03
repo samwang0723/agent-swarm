@@ -10,7 +10,7 @@ The agent system is built on Mastra and consists of several key components:
 - **User Orchestration** (`agent.swarm.ts`): Manages user-specific agent sessions with persistent memory
 - **Agent Factory** (`agent.factory.ts`): Creates and configures agent registries
 - **Agent Registry** (`agent.repository.ts`): Manages agent lifecycle, tools, and handovers
-- **Agent Service** (`agent.service.ts`): Factory functions for creating different agent types
+- **Agent Utilities** (`agent.util.ts`): Helper functions for agent creation and data parsing
 - **Memory Service** (`mastra.memory.ts`): Handles persistent memory across conversations
 - **MCP Adapter** (`mastra.adapter.ts`): Converts MCP tools to Mastra tools
 - **DTOs** (`agent.dto.ts`): Type definitions and interfaces
@@ -125,14 +125,14 @@ sequenceDiagram
 Manages user-specific agent sessions with persistent memory:
 
 ```typescript
-// Get or create user orchestration
-const orchestration = await getOrCreateUserOrchestration(session, model);
+// Get or create user orchestration from the user's session
+const orchestration = await getOrCreateUserOrchestration(session);
 
 // Process message through active agent
 const response = await processUserMessage(
-  userId,
-  message,
-  sessionId,
+  session.id,
+  userMessage,
+  session.id,
   orchestration.memoryContext,
   orchestration.receptionistAgent
 );
@@ -253,15 +253,18 @@ export const agentSystemConfig: AgentSystemConfig = {
 ### Basic Setup
 
 ```typescript
-import { getOrCreateUserOrchestration } from '@/features/agents/agent.swarm';
-import { createModelByKey } from '@/shared/config/models';
+import {
+  getOrCreateUserOrchestration,
+  processUserMessage,
+} from '@/features/agents/agent.swarm';
+import { Session } from '@/shared/middleware/auth'; // Assuming Session is typed
 
-// Get language model
-const model = createModelByKey();
-if (!model) throw new Error('Failed to create model');
+// Assume 'session' is available from request authentication
+const session: Session = { id: 'user_123', accessToken: 'your_access_token' };
+const userMessage = 'Find me a romantic restaurant for tonight';
 
 // Get user orchestration
-const orchestration = await getOrCreateUserOrchestration(session, model);
+const orchestration = await getOrCreateUserOrchestration(session);
 
 // Process user message
 const response = await processUserMessage(
@@ -271,6 +274,8 @@ const response = await processUserMessage(
   orchestration.memoryContext,
   orchestration.receptionistAgent
 );
+
+console.log(response.content);
 ```
 
 ### Advanced Usage with Memory
@@ -278,22 +283,23 @@ const response = await processUserMessage(
 ```typescript
 import { mastraMemoryService } from '@/features/agents/mastra.memory';
 
-// Initialize user memory
+const userId = 'user_123';
+const sessionId = 'session_abc';
+
+// Initialize user memory (prepares it for the first interaction)
 await mastraMemoryService.initializeUserMemory(userId);
 
-// Get conversation history
+// Get conversation history and working memory
+// Note: `messages` may be limited based on the current Mastra Memory API
 const { messages, workingMemory } = await mastraMemoryService.getUserMemory(
   userId,
   sessionId
 );
 
-// Update user preferences
-await mastraMemoryService.updateWorkingMemory(userId, sessionId, {
-  preferences: {
-    preferredLanguage: 'en',
-    communicationStyle: 'concise',
-  },
-});
+console.log('Working Memory:', workingMemory);
+
+// Note: Working memory is updated AUTOMATICALLY by agents during conversations.
+// There is no need to call an update method manually.
 ```
 
 ## Adding New Agents
@@ -704,16 +710,16 @@ const agent = createBasicMastraAgent({
 The agent swarm provides multi-agent coordination:
 
 ```typescript
-// Create user orchestration
-const orchestration = await getOrCreateUserOrchestration(session, model);
+// Create user orchestration from session
+const orchestration = await getOrCreateUserOrchestration(session);
 
 // Process message through orchestration
 const response = await processUserMessage(
-  userId,
+  session.id,
   message,
-  sessionId,
-  memoryContext,
-  receptionistAgent
+  session.id,
+  orchestration.memoryContext,
+  orchestration.receptionistAgent
 );
 ```
 

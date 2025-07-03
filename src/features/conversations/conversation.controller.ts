@@ -129,7 +129,7 @@ app.get('/models', requireAuth, c => {
  */
 app.get('/history', requireAuth, async c => {
   const user = c.get('user');
-  const history = await messageHistory.getHistory(user.id);
+  const history = await messageHistory.getHistory(user.id, user.sessionId);
 
   return c.json({
     userId: user.id,
@@ -164,7 +164,7 @@ app.get('/history', requireAuth, async c => {
  */
 app.delete('/history', requireAuth, c => {
   const user = c.get('user');
-  messageHistory.clearHistory(user.id);
+  messageHistory.clearHistory(user.id, user.sessionId);
   return c.json({ message: 'History cleared', userId: user.id });
 });
 

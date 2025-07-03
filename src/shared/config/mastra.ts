@@ -121,19 +121,31 @@ export const createMastraMemory = () => {
     const memoryConfig: {
       storage?: PostgresStore;
       options: {
+        lastMessages: number;
         workingMemory: {
           enabled: boolean;
           scope: 'resource' | 'thread';
           schema: typeof userProfileSchema;
         };
+        // semanticRecall?: {
+        //   topK: number;
+        //   messageRange: number;
+        //   scope: 'resource' | 'thread';
+        // };
       };
     } = {
       options: {
+        lastMessages: 10,
         workingMemory: {
           enabled: true,
           scope: 'resource', // Enable resource-scoped memory for cross-conversation persistence
           schema: userProfileSchema,
         },
+        // semanticRecall: {
+        //   topK: 3, // Retrieve 3 most similar messages
+        //   messageRange: 2, // Include 2 messages before and after each match
+        //   scope: 'resource', // Search across all threads for this user
+        // },
       },
     };
 
@@ -167,11 +179,17 @@ export const createMastraMemory = () => {
     );
     const fallbackMemory = new Memory({
       options: {
+        lastMessages: 10,
         workingMemory: {
           enabled: true,
           scope: 'resource',
           schema: userProfileSchema,
         },
+        // semanticRecall: {
+        //   topK: 3, // Retrieve 3 most similar messages
+        //   messageRange: 2, // Include 2 messages before and after each match
+        //   scope: 'resource', // Search across all threads for this user
+        // },
       },
     });
 

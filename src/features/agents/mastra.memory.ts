@@ -113,7 +113,7 @@ class MastraMemoryService {
   }> {
     try {
       const threadId = memoryPatterns.getThreadId(userId);
-      const { messagesV2, uiMessages } = await this.memory.query({
+      const { uiMessages } = await this.memory.query({
         threadId,
         selectBy: {
           last: 50,
@@ -158,16 +158,40 @@ class MastraMemoryService {
    * Note: Current Mastra Memory API doesn't have direct message storage
    * Using working memory to store recent context
    */
-  async saveUserMessage(
+  async saveMessage(
+    role: 'user' | 'assistant',
     userId: string,
     threadId: string,
     message: string
   ): Promise<void> {
     try {
-      // Update working memory with session state
-      await this.updateSessionState(userId, threadId, {
-        lastTaskDiscussed: safePreview(message, 100).preview, // First 100 chars as summary
-        currentContext: threadId,
+      const threadId = memoryPatterns.getThreadId(userId);
+      const resourceId = memoryPatterns.getResourceId(userId);
+      const thread = await this.memory.getThreadById({ threadId });
+      if (!thread) {
+        await this.memory.createThread({
+          threadId,
+          resourceId,
+          metadata: {
+            title: 'User Session',
+          },
+        });
+      }
+      await this.memory.saveMessages({
+        format: 'v2',
+        messages: [
+          {
+            role,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: message }],
+            },
+            createdAt: new Date(),
+            id: `user-message-${Date.now()}`,
+            threadId,
+            resourceId,
+          },
+        ],
       });
 
       logger.debug('User message saved to memory', { userId, threadId });
@@ -177,69 +201,6 @@ class MastraMemoryService {
         userId,
         threadId,
         message: safePreview(message, 50).preview,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Save an assistant message to memory
-   */
-  async saveAssistantMessage(
-    userId: string,
-    threadId: string,
-    message: string
-  ): Promise<void> {
-    try {
-      // Update working memory with last assistant response
-      await this.updateSessionState(userId, threadId, {
-        lastAgentUsed: 'assistant',
-        currentContext: threadId,
-      });
-
-      logger.debug('Assistant message saved to memory', { userId, threadId });
-    } catch (error) {
-      logger.error('Failed to save assistant message', {
-        error,
-        userId,
-        threadId,
-        message: safePreview(message, 50).preview,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Save tool messages to memory
-   */
-  async saveToolMessages(
-    userId: string,
-    threadId: string,
-    toolMessages: Message[]
-  ): Promise<void> {
-    try {
-      // Update working memory with tool usage context
-      const toolNames = toolMessages
-        .filter(msg => msg.toolName)
-        .map(msg => msg.toolName)
-        .join(', ');
-
-      await this.updateSessionState(userId, threadId, {
-        lastAgentUsed: toolNames || 'tool',
-        currentContext: threadId,
-      });
-
-      logger.debug('Tool messages saved to memory', {
-        userId,
-        threadId,
-        messageCount: toolMessages.length,
-      });
-    } catch (error) {
-      logger.error('Failed to save tool messages', {
-        error,
-        userId,
-        threadId,
-        messageCount: toolMessages.length,
       });
       throw error;
     }
@@ -309,84 +270,6 @@ class MastraMemoryService {
       logger.info('All user memory cleared', { userId });
     } catch (error) {
       logger.error('Failed to clear all user memory', { error, userId });
-      throw error;
-    }
-  }
-
-  /**
-   * Update user working memory (profile and preferences)
-   * Note: Mastra Memory API doesn't provide direct working memory updates.
-   * Working memory is automatically managed by agents during conversations.
-   * This method serves as a compatibility layer for session state tracking.
-   */
-  async updateWorkingMemory(
-    userId: string,
-    threadId: string,
-    workingMemory: Partial<UserProfileSchema>
-  ): Promise<void> {
-    try {
-      const config = this.getMemoryConfig(userId, threadId);
-
-      // Get existing working memory for logging purposes
-      const existing =
-        ((await this.memory.getWorkingMemory({
-          threadId: config.thread,
-          resourceId: config.resource,
-        })) as UserProfileSchema) || {};
-
-      // Instead of trying to directly update working memory, we'll:
-      // 1. Log the intended update for debugging
-      // 2. Store the session state in a way that can be retrieved later
-      // 3. Let the agent's memory system handle working memory updates naturally
-
-      logger.debug('Working memory update requested', {
-        userId,
-        threadId,
-        existing: Object.keys(existing).length > 0 ? 'has_data' : 'empty',
-        update: Object.keys(workingMemory).join(', '),
-      });
-
-      // Create a synthetic memory thread to track session state changes
-      // This allows us to maintain some context even without direct working memory updates
-      const sessionUpdate = {
-        timestamp: new Date().toISOString(),
-        userId,
-        threadId,
-        updates: workingMemory,
-      };
-
-      // Log the session update for potential future retrieval
-      logger.info('Session state update logged', sessionUpdate);
-
-      // Note: Working memory in Mastra is designed to be updated automatically
-      // during agent conversations rather than through direct API calls.
-      // The agent's memory configuration handles this automatically.
-    } catch (error) {
-      logger.error('Failed to process working memory update', {
-        error,
-        userId,
-        threadId,
-      });
-      throw error;
-    }
-  }
-
-  /**
-   * Update session state in working memory
-   */
-  async updateSessionState(
-    userId: string,
-    threadId: string,
-    sessionState: Partial<UserProfileSchema['sessionState']>
-  ): Promise<void> {
-    try {
-      await this.updateWorkingMemory(userId, threadId, { sessionState });
-    } catch (error) {
-      logger.error('Failed to update session state', {
-        error,
-        userId,
-        threadId,
-      });
       throw error;
     }
   }

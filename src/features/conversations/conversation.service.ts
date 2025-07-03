@@ -1,5 +1,5 @@
 import { LanguageModelV1, streamText } from 'ai';
-import { OutputStrategy, Message } from './conversation.dto';
+import { OutputStrategy } from './conversation.dto';
 import logger from '../../shared/utils/logger';
 import { Session } from '../../shared/middleware/auth';
 import { getOrCreateUserOrchestration } from '../agents/agent.swarm';
@@ -75,19 +75,13 @@ async function handleRagStream(
   try {
     outputStrategy.onStart?.({ sessionId: session.id, streaming: true });
 
-    // Save the current user message for session state (best effort)
-    logger.debug(`[${session.id}] RAG: Saving user message for session state`, {
-      messageLength: userMessage.length,
-      messagePreview: safePreview(userMessage, 100).preview,
-    });
-
     try {
-      await mastraMemoryService.saveUserMessage(
+      await mastraMemoryService.saveMessage(
+        'user',
         session.id,
         session.id,
         userMessage
       );
-      logger.debug(`[${session.id}] RAG: User message saved successfully`);
     } catch (saveError) {
       logger.warn(
         `[${session.id}] RAG: Failed to save user message (non-critical)`,
@@ -96,38 +90,24 @@ async function handleRagStream(
           sessionId: session.id,
         }
       );
-      // Don't throw - this is non-critical for RAG flows
     }
-
-    // For RAG flows, we don't need full conversation history - we use the current message
-    // with RAG context. This is different from agent flows where history matters.
-    logger.debug(`[${session.id}] RAG: Using current message for LLM call`);
-
-    // Create a simple message array with just the current user message
-    const historyMessages: Message[] = [
-      {
-        role: 'user',
-        content: userMessage,
-      },
-    ];
-
-    logger.debug(`[${session.id}] RAG: Prepared messages for LLM`, {
-      messageCount: historyMessages.length,
-      messageLength: userMessage.length,
-    });
 
     const result = streamText({
       model,
-      messages: historyMessages,
-      // maxTokens: 500,
-      // temperature: 0.7,
+      messages: [
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
     });
 
     const finalText = await readTextStream(result.textStream, outputStrategy);
 
     // Save assistant message for session state (best effort)
     try {
-      await mastraMemoryService.saveAssistantMessage(
+      await mastraMemoryService.saveMessage(
+        'assistant',
         session.id,
         session.id,
         finalText
@@ -433,8 +413,6 @@ export async function sendMessage(
       }
     }
   }
-
-  logger.debug(`Augmented message: ${augmentedMessage}`);
 
   // Route to appropriate handler based on RAG vs agent flow
   if (ragApplied) {

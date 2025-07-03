@@ -35,29 +35,6 @@ class MessageHistory {
   }
 
   /**
-   * Add an assistant message to the history
-   * ⚠️ ONLY use this for non-agent flows (e.g., RAG)
-   * For agent flows, messages are saved automatically by agent.stream()
-   */
-  async addAssistantMessage(
-    userId: string,
-    threadId: string,
-    message: string
-  ): Promise<void> {
-    try {
-      await mastraMemoryService.saveAssistantMessage(userId, threadId, message);
-    } catch (error) {
-      logger.error('Failed to save assistant message to Mastra memory', {
-        error,
-        userId,
-        threadId,
-        message: safePreview(message, 50).preview,
-      });
-      throw error;
-    }
-  }
-
-  /**
    * Clear all history for a specific user
    * Used for: Reset conversation functionality
    */

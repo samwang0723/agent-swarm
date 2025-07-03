@@ -1,5 +1,5 @@
-import { LanguageModelUsage } from 'ai';
-import { ClientLocation, TimeRange } from './conversation.dto';
+import { LanguageModelUsage, ToolCall, ToolResult } from 'ai';
+import { ClientLocation, LoggableEvent, TimeRange } from './conversation.dto';
 import { calculateCost } from '@/shared/utils/costs';
 import { getCurrentModelInfo } from '@/shared/config/models';
 import logger from '@/shared/utils/logger';
@@ -316,10 +316,33 @@ export function logTokenUsage(
 }
 
 // Placeholder for tool logging
-export function logToolInformation(sessionId: string, event: unknown) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-  if (event && typeof event === 'object' && 'usage' in event) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    logTokenUsage(sessionId, event.usage as LanguageModelUsage);
+export function logToolInformation(sessionId: string, event: LoggableEvent) {
+  logTokenUsage(sessionId, event.usage as LanguageModelUsage);
+  logger.info(
+    `Step finished - Type: ${event.stepType}, Tools: ${
+      event.toolCalls?.length || 0
+    }, Results: ${event.toolResults?.length || 0}`
+  );
+
+  if (event.toolCalls && event.toolCalls.length > 0) {
+    logger.info(
+      'Tool calls:',
+      event.toolCalls.map(
+        (tc: ToolCall<string, unknown>) =>
+          `${tc.toolName}(${JSON.stringify(tc.args)})`
+      )
+    );
+  }
+
+  if (event.toolResults && event.toolResults.length > 0) {
+    logger.info(
+      'Tool results:',
+      event.toolResults.map((tr: ToolResult<string, unknown, unknown>) => {
+        const jsonStr = JSON.stringify(tr.result);
+        const truncated =
+          jsonStr.length > 100 ? jsonStr.slice(0, 300) + '...' : jsonStr;
+        return `${tr.toolName}: ${truncated}`;
+      })
+    );
   }
 }

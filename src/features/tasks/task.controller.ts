@@ -64,6 +64,21 @@ export const syncCalendarTask = async (
       workflowId: 'importCalendar-' + nanoid(),
     });
 
+    try {
+      // Start the cron workflow
+      await client.workflow.start(syncCalendar, {
+        cronSchedule: '*/10 * * * *',
+        taskQueue: config.temporal.taskQueue,
+        args: [token, userId],
+        workflowId: `importCalendar-cron-${userId}`,
+      });
+    } catch (e) {
+      if (!(e instanceof WorkflowExecutionAlreadyStartedError)) {
+        throw e;
+      }
+      // If it's already started, we can ignore the error.
+    }
+
     return handle.workflowId;
   } finally {
     await connection.close();

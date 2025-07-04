@@ -163,7 +163,7 @@ export class McpClient {
 
   async callTool(
     name: string,
-    parameters: ToolExecutionContext<z.ZodType>,
+    parameters: Record<string, unknown> | ToolExecutionContext<z.ZodType>,
     requiresAuth?: boolean
   ): Promise<unknown> {
     if (!this.sessionId) {
@@ -193,14 +193,21 @@ export class McpClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
+    // Handle both raw parameters and ToolExecutionContext
+    const toolParameters =
+      'context' in parameters ? parameters.context : parameters;
+
     const payload = {
       jsonrpc: '2.0',
       method: 'tools/call',
-      params: { name, arguments: parameters.context },
+      params: { name, arguments: toolParameters },
       id: Date.now(),
     };
 
     try {
+      logger.info(
+        `Calling tool ${name} with parameters: ${JSON.stringify(payload)}, headers: ${JSON.stringify(headers)}`
+      );
       const response = await fetch(this.config.url, {
         method: 'POST',
         headers,

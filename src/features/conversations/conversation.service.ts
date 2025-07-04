@@ -158,7 +158,6 @@ async function handleRagStream(
 
 async function handleSwarmStream(
   session: Session,
-  model: LanguageModelV1,
   intentResult: ToolIntentResult,
   outputStrategy: OutputStrategy,
   augmentedMessage: string
@@ -329,11 +328,6 @@ export async function sendMessage(
   logger.info(
     `[${session.id}] Intent detection took ${intentDetectionDuration}ms.`
   );
-  logger.debug(`[${session.id}] Tool intent detection result:`, {
-    requiresTools: intentResult.requiresTools,
-    detectedTools: intentResult.detectedTools,
-    confidence: intentResult.confidence,
-  });
 
   // Use intent detection to determine which tools to use for RAG
   if (intentResult.requiresTools && intentResult.detectedTools) {
@@ -417,13 +411,15 @@ export async function sendMessage(
   // Route to appropriate handler based on RAG vs agent flow
   if (ragApplied) {
     // RAG flow: handleRagStream saves user message and fetches history internally for LLM call
+    logger.info(
+      `[${session.id}] RAG flow: handleRagStream saves user message and fetches history internally for LLM call`
+    );
     return handleRagStream(session, model, outputStrategy, augmentedMessage);
   }
 
   // Agent flow: handleSwarmStream uses Mastra's automatic memory management
   return handleSwarmStream(
     session,
-    model,
     intentResult,
     outputStrategy,
     augmentedMessage

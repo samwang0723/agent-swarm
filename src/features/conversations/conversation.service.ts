@@ -210,6 +210,10 @@ async function handleRagStream(
     const startTime = Date.now();
     const result = streamText({
       model,
+      maxSteps: 10,
+      maxRetries: 1,
+      maxTokens: 500,
+      toolChoice: 'none',
       messages: [
         {
           role: 'user',
@@ -354,8 +358,14 @@ async function handleSwarmStream(
     const response = await agent.stream(augmentedMessage, {
       resourceId: memoryContext.resourceId,
       threadId: memoryContext.threadId,
-      maxRetries: 1,
-      maxSteps: 5,
+      maxRetries: 0,
+      maxSteps: 10,
+      maxTokens: 800,
+      toolChoice: 'auto',
+      onError: error => {
+        logger.error(`[${session.id}] Agent: Error: ${error}`);
+        throw error;
+      },
       onFinish: result => {
         const duration = Date.now() - startTime;
         logger.info(`[${session.id}] Agent: Stream took ${duration} ms`);

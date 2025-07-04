@@ -195,9 +195,7 @@ export class AgentRegistry {
         agentConfig.mcpServers.forEach(serverName => {
           const serverTools = toolRegistry.getServerTools(serverName);
           Object.entries(serverTools).forEach(([toolName, tool]) => {
-            // Use server prefix to prevent conflicts
-            const prefixedName = `${serverName}_${toolName}`;
-            serverToolsMap[prefixedName] = tool;
+            serverToolsMap[toolName] = tool;
           });
         });
 

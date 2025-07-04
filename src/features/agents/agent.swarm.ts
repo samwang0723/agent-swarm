@@ -3,7 +3,6 @@ import {
   MastraMemoryContext,
   UserOrchestration,
   OrchestrationStats,
-  AgentResponse,
 } from './agent.dto';
 import logger from '../../shared/utils/logger';
 import { Session } from '../../shared/middleware/auth';
@@ -258,6 +257,53 @@ export function getUserOrchestration(
   userId: string
 ): UserOrchestration | undefined {
   return userOrchestrations.get(userId);
+}
+
+/**
+ * Get current active agent from user orchestration
+ * Returns the agent instance based on the current state
+ */
+export function getCurrentAgent(
+  orchestration: UserOrchestration
+): MastraAgent | undefined {
+  const currentAgentId = orchestration.state.currentAgent;
+
+  if (!currentAgentId) {
+    logger.warn('No current agent set in orchestration state');
+    return undefined;
+  }
+
+  const currentAgent = orchestration.agents[currentAgentId];
+
+  if (!currentAgent) {
+    logger.warn(
+      `Current agent '${currentAgentId}' not found in agents record`,
+      {
+        availableAgents: Object.keys(orchestration.agents),
+        currentAgentId,
+      }
+    );
+    return undefined;
+  }
+
+  return currentAgent;
+}
+
+/**
+ * Get current agent for a specific user
+ * Convenience function that combines user lookup and current agent retrieval
+ */
+export function getCurrentAgentForUser(
+  userId: string
+): MastraAgent | undefined {
+  const orchestration = getUserOrchestration(userId);
+
+  if (!orchestration) {
+    logger.warn(`No orchestration found for user ${userId}`);
+    return undefined;
+  }
+
+  return getCurrentAgent(orchestration);
 }
 
 /**

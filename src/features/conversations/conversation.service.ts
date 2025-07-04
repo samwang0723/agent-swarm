@@ -39,6 +39,159 @@ const createIntentDetector = (): IToolIntentDetector => {
 // Global intent detector instance
 const intentDetector = createIntentDetector();
 
+// Add performance optimization utilities
+const intentCache = new Map<string, ToolIntentResult>();
+const ragCache = new Map<string, { context: string; timestamp: number }>();
+const RAG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Hash function for caching
+function hashMessage(message: string): string {
+  return Buffer.from(message.toLowerCase().trim())
+    .toString('base64')
+    .slice(0, 16);
+}
+
+// Optimized intent detection with caching
+async function optimizedIntentDetection(
+  message: string
+): Promise<ToolIntentResult> {
+  const messageHash = hashMessage(message);
+
+  if (intentCache.has(messageHash)) {
+    return intentCache.get(messageHash)!;
+  }
+
+  const result = await intentDetector.detectToolIntent(message);
+  intentCache.set(messageHash, result);
+
+  // Clean cache periodically (keep last 100 entries)
+  if (intentCache.size > 100) {
+    const entries = Array.from(intentCache.entries());
+    intentCache.clear();
+    entries.slice(-50).forEach(([key, value]) => intentCache.set(key, value));
+  }
+
+  return result;
+}
+
+// Optimized RAG processing with caching
+async function optimizedRagProcessing(
+  session: Session,
+  message: string,
+  intentResult: ToolIntentResult,
+  clientTimezone: string
+): Promise<{ context: string; ragApplied: boolean }> {
+  if (!intentResult.requiresTools || !intentResult.detectedTools) {
+    return { context: '', ragApplied: false };
+  }
+
+  const cacheKey = `${session.id}:${hashMessage(message)}:${clientTimezone}`;
+  const cached = ragCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < RAG_CACHE_TTL) {
+    return { context: cached.context, ragApplied: true };
+  }
+
+  const ragPromises: Promise<{ type: string; content: string }>[] = [];
+
+  // Parallel RAG processing - collect just the context, not full prompts
+  if (isToolDetected(intentResult.detectedTools, 'email')) {
+    ragPromises.push(
+      embeddingService
+        .searchEmails(session.id, message)
+        .then(results => {
+          if (results && results.length > 0) {
+            const content = results.map(r => r.content).join('\n\n---\n\n');
+            return { type: 'email', content };
+          }
+          return { type: 'email', content: '' };
+        })
+        .catch(error => {
+          logger.warn('Email RAG failed:', error);
+          return { type: 'email', content: '' };
+        })
+    );
+  }
+
+  if (isToolDetected(intentResult.detectedTools, 'calendar')) {
+    ragPromises.push(
+      (async () => {
+        try {
+          const timeRange = extractTimeRange(message, clientTimezone);
+
+          if (timeRange) {
+            const calendarResults = await getCalendarEventsByTimeRange(
+              session.id,
+              session.email,
+              timeRange.from,
+              timeRange.to,
+              10
+            );
+
+            if (calendarResults && calendarResults.length > 0) {
+              const content = calendarResults
+                .map(
+                  r =>
+                    `(${r.start_time} to ${r.end_time}) [${r.title}] ${r.description}`
+                )
+                .join('\n\n---\n\n');
+              return { type: 'calendar', content };
+            }
+          } else {
+            const searchResults = await embeddingService.searchCalendarEvents(
+              session.id,
+              message
+            );
+            if (searchResults && searchResults.length > 0) {
+              const content = searchResults
+                .map(r => r.content)
+                .join('\n\n---\n\n');
+              return { type: 'calendar', content };
+            }
+          }
+        } catch (error) {
+          logger.warn('Calendar RAG failed:', error);
+        }
+        return { type: 'calendar', content: '' };
+      })()
+    );
+  }
+
+  const ragResults = await Promise.all(ragPromises);
+  const validResults = ragResults.filter(r => r.content.length > 0);
+
+  if (validResults.length === 0) {
+    return { context: '', ragApplied: false };
+  }
+
+  // Build a single, unified context prompt
+  const contextSections = validResults.map(r => {
+    if (r.type === 'email') {
+      return `Email Context:\n${r.content}`;
+    } else if (r.type === 'calendar') {
+      return `Calendar Context:\n${r.content}`;
+    }
+    return r.content;
+  });
+
+  const unifiedContext = contextSections.join('\n\n---\n\n');
+  const context = `Based on the following context, please answer the question (time responses using timezone ${clientTimezone}) or use tools.\n\nContext:\n${unifiedContext}\n\nQuestion: ${message}`;
+  const ragApplied = true;
+
+  if (ragApplied) {
+    ragCache.set(cacheKey, { context, timestamp: Date.now() });
+
+    // Clean cache periodically
+    if (ragCache.size > 50) {
+      const entries = Array.from(ragCache.entries());
+      ragCache.clear();
+      entries.slice(-25).forEach(([key, value]) => ragCache.set(key, value));
+    }
+  }
+
+  return { context, ragApplied };
+}
+
 // Helper function to handle text streaming with efficient accumulation
 async function readTextStream(
   textStream: AsyncIterable<string>,
@@ -160,7 +313,8 @@ async function handleSwarmStream(
   session: Session,
   intentResult: ToolIntentResult,
   outputStrategy: OutputStrategy,
-  augmentedMessage: string
+  augmentedMessage: string,
+  orchestration: Awaited<ReturnType<typeof getOrCreateUserOrchestration>>
 ) {
   let selectedAgentId: string | undefined;
   let memoryContext:
@@ -172,9 +326,6 @@ async function handleSwarmStream(
 
   try {
     outputStrategy.onStart?.({ sessionId: session.id, streaming: true });
-
-    // Use Mastra workflow orchestration
-    const orchestration = await getOrCreateUserOrchestration(session);
 
     // Extract memory context from orchestration
     memoryContext = orchestration.memoryContext;
@@ -225,28 +376,36 @@ async function handleSwarmStream(
     // Use the augmented message (with RAG context) for the agent
     // Mastra agents handle conversation history automatically through memory
     // Pass memory context as second parameter for proper tool execution
-    const streamResult = await agent.stream(augmentedMessage, {
+    const startTime = Date.now();
+    let accumulatedText = '';
+    const response = await agent.stream(augmentedMessage, {
       resourceId: memoryContext.resourceId,
       threadId: memoryContext.threadId,
+      maxRetries: 0,
+      maxSteps: 2,
+      onFinish: result => {
+        const duration = Date.now() - startTime;
+        logger.info(`[${session.id}] Stream took ${duration} ms`);
+      },
     });
 
-    // Stream text and accumulate result
-    const finalText = await readTextStream(
-      streamResult.textStream,
-      outputStrategy
-    );
+    for await (const chunk of response.fullStream) {
+      if (chunk.type === 'text-delta') {
+        accumulatedText += chunk.textDelta;
+        outputStrategy.onChunk?.(chunk.textDelta, accumulatedText);
+      }
+    }
 
     outputStrategy.onFinish?.({ complete: true, sessionId: session.id });
 
-    // Get updated messages from Mastra memory
-    const { messages } = await mastraMemoryService.getUserMemory(
-      session.id,
-      session.id
-    );
+    const messages = [
+      { role: 'user', content: augmentedMessage },
+      { role: 'assistant', content: accumulatedText },
+    ];
 
     return {
       messages,
-      newMessage: finalText,
+      newMessage: accumulatedText,
     };
   } catch (error) {
     logger.error('sendMessage with agent orchestration:', error);
@@ -256,9 +415,10 @@ async function handleSwarmStream(
     outputStrategy.onError?.(errorMessage);
 
     // Get fallback history based on memory system
-    const messages = (
-      await mastraMemoryService.getUserMemory(session.id, session.id)
-    ).messages;
+    const messages = [
+      { role: 'user', content: augmentedMessage },
+      { role: 'assistant', content: `Error: ${errorMessage}` },
+    ];
 
     return {
       messages,
@@ -275,9 +435,8 @@ export async function sendMessage(
   requestHeaders?: Record<string, string | string[] | undefined>
 ) {
   let augmentedMessage = message;
-  let ragApplied = false;
 
-  // Detect client timezone and datetime if headers are provided
+  // 1. Detect client timezone and datetime (fast operation)
   let clientTimezone = 'UTC';
   let clientDateTime: string | null = null;
   if (requestHeaders) {
@@ -286,11 +445,10 @@ export async function sendMessage(
       clientDateTime = extractClientDateTime(requestHeaders);
     } catch (error) {
       logger.warn('Failed to detect client timezone:', error);
-      // Continue with UTC as fallback
     }
   }
 
-  // Append current datetime information if available
+  // 2. Add datetime information if available
   if (clientDateTime) {
     const formattedDateTime = new Date(clientDateTime).toLocaleString('en-US', {
       timeZone: clientTimezone,
@@ -305,123 +463,61 @@ export async function sendMessage(
     augmentedMessage = `${message}\n\n[Current datetime: ${formattedDateTime}]`;
   }
 
-  // Check for time-sensitive messages and extract date range with timezone
+  // 3. Add time range information if detected
   const timeRange = extractTimeRange(message, clientTimezone);
   if (timeRange) {
-    logger.info({
-      message: 'Detected time-sensitive message',
-      userId: session.id,
-      timeRange: `${timeRange.from} to ${timeRange.to}`,
-      timezone: clientTimezone,
-      originalMessage: message,
-    });
-
-    // Augment message with time range information (append to existing augmentation)
     augmentedMessage = `${augmentedMessage}\n\n[Query Time Range: ${timeRange.from} to ${timeRange.to}, Timezone: ${clientTimezone}]`;
   }
 
-  // RAG: Retrieve context from embeddings if intent is matched
-  // 4. Detect tool intent from transcript
+  // 4. Parallel processing of expensive operations
   const intentDetectionStartTime = Date.now();
-  const intentResult = await intentDetector.detectToolIntent(message);
+  const [intentResult, orchestration] = await Promise.all([
+    optimizedIntentDetection(message),
+    getOrCreateUserOrchestration(session),
+  ]);
+
   const intentDetectionDuration = Date.now() - intentDetectionStartTime;
   logger.info(
-    `[${session.id}] Intent detection took ${intentDetectionDuration}ms.`
+    `[${session.id}] Intent detection + orchestration took ${intentDetectionDuration}ms.`
   );
 
-  // Use intent detection to determine which tools to use for RAG
-  if (intentResult.requiresTools && intentResult.detectedTools) {
-    // Check if email tool is detected
-    if (isToolDetected(intentResult.detectedTools, 'email')) {
-      const searchResults = await embeddingService.searchEmails(
-        session.id,
-        message
-      );
+  // Log the actual intent detection result for debugging
+  logger.info(`[${session.id}] Intent detection result:`, {
+    requiresTools: intentResult.requiresTools,
+    detectedTools: intentResult.detectedTools,
+    confidence: intentResult.confidence?.toFixed(3),
+    message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+  });
 
-      if (searchResults && searchResults.length > 0) {
-        const context = searchResults.map(r => r.content).join('\n\n---\n\n');
-        augmentedMessage += `Based on the following context from emails, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
-        logger.info({
-          message:
-            'Augmented user message with email context via intent detection.',
-          userId: session.id,
-          resultsCount: searchResults.length,
-          detectedTools: intentResult.detectedTools,
-          confidence: intentResult.confidence,
-        });
-        ragApplied = true;
-      }
-    }
+  // 5. RAG processing in parallel (if needed)
+  const ragStartTime = Date.now();
+  const { context: ragContext, ragApplied } = await optimizedRagProcessing(
+    session,
+    message,
+    intentResult,
+    clientTimezone
+  );
 
-    // Check if calendar tool is detected
-    if (isToolDetected(intentResult.detectedTools, 'calendar')) {
-      // If timeRange is available, use direct database query
-      if (timeRange) {
-        const calendarResults = await getCalendarEventsByTimeRange(
-          session.id,
-          session.email,
-          timeRange.from,
-          timeRange.to,
-          10
-        );
-
-        if (calendarResults && calendarResults.length > 0) {
-          const context = calendarResults
-            .map(
-              r =>
-                `(${r.start_time} to ${r.end_time}) [${r.title}] ${r.description}`
-            )
-            .join('\n\n---\n\n');
-          augmentedMessage += `Based on the following context from your calendar events in the specified time range, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
-          logger.info({
-            message:
-              'Augmented user message with time-range calendar context via intent detection.',
-            userId: session.id,
-            resultsCount: calendarResults.length,
-            timeRange: `${timeRange.from} to ${timeRange.to}`,
-            detectedTools: intentResult.detectedTools,
-            confidence: intentResult.confidence,
-          });
-          ragApplied = true;
-        }
-      } else {
-        // Fallback to embedding search when no time range is provided
-        const searchResults = await embeddingService.searchCalendarEvents(
-          session.id,
-          message
-        );
-
-        if (searchResults && searchResults.length > 0) {
-          const context = searchResults.map(r => r.content).join('\n\n---\n\n');
-          augmentedMessage += `Based on the following context from your calendar, please answer question (time response using the timezone ${clientTimezone}) or use tools.\n\nContext:\n${context}\n\nQuestion: ${message}`;
-          logger.info({
-            message:
-              'Augmented user message with calendar context via intent detection.',
-            userId: session.id,
-            resultsCount: searchResults.length,
-            detectedTools: intentResult.detectedTools,
-            confidence: intentResult.confidence,
-          });
-          ragApplied = true;
-        }
-      }
-    }
+  if (ragApplied) {
+    const ragDuration = Date.now() - ragStartTime;
+    logger.info(`[${session.id}] RAG processing took ${ragDuration}ms.`);
+    augmentedMessage += ragContext;
   }
 
-  // Route to appropriate handler based on RAG vs agent flow
+  // 6. Route to appropriate handler
   if (ragApplied) {
-    // RAG flow: handleRagStream saves user message and fetches history internally for LLM call
     logger.info(
-      `[${session.id}] RAG flow: handleRagStream saves user message and fetches history internally for LLM call`
+      `[${session.id}] RAG flow: handleRagStream with cached context`
     );
     return handleRagStream(session, model, outputStrategy, augmentedMessage);
   }
 
-  // Agent flow: handleSwarmStream uses Mastra's automatic memory management
+  // Agent flow: handleSwarmStream uses pre-loaded orchestration
   return handleSwarmStream(
     session,
     intentResult,
     outputStrategy,
-    augmentedMessage
+    augmentedMessage,
+    orchestration
   );
 }

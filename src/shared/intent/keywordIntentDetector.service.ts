@@ -220,7 +220,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
         totalMatches += matches;
         maxMatches = Math.max(maxMatches, matches);
 
-        logger.info(
+        logger.debug(
           `[KeywordIntentDetector] Detected ${toolName} tool intent with ${matches} keyword matches (threshold: ${minimumMatches}):`,
           matchedKeywords
         );
@@ -256,7 +256,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
         }
       );
     } else {
-      logger.info(
+      logger.debug(
         `[KeywordIntentDetector] No tool intent detected for transcript: ${
           transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
         }`
@@ -283,7 +283,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
       this.toolKeywords[toolName] = [];
     }
     this.toolKeywords[toolName].push(...keywords);
-    logger.info(
+    logger.debug(
       `[KeywordIntentDetector] Added ${keywords.length} keywords to ${toolName} category`
     );
   }

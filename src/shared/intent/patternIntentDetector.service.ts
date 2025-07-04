@@ -26,7 +26,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
     this.patterns = { ...intentPatterns };
     this.weights = { ...keywordWeights };
 
-    logger.info(
+    logger.debug(
       `[PatternIntentDetector] Initialized with ${Object.keys(this.patterns).length} tool categories:`,
       Object.keys(this.patterns)
     );
@@ -49,7 +49,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
     const detectedTools: string[] = [];
     const toolScores: Record<string, number> = {};
 
-    logger.info(
+    logger.debug(
       `[PatternIntentDetector] Processing transcript: ${transcript.substring(0, 100)} ...`
     );
 
@@ -86,7 +86,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
         detectedTools.push(toolName);
         toolScores[toolName] = combinedScore;
 
-        logger.info(
+        logger.debug(
           `[PatternIntentDetector] Detected ${toolName} tool intent:`,
           {
             patternScore: patternScore.toFixed(3),
@@ -135,7 +135,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
         ),
       });
     } else {
-      logger.info(
+      logger.debug(
         `[PatternIntentDetector] No tool intent detected for transcript:`,
         transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
       );
@@ -160,7 +160,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
     }
 
     if (matches > 0) {
-      logger.info(
+      logger.debug(
         `[PatternIntentDetector] Pattern matches found: ${matches}/${patterns.length}`,
         matchedPatterns.slice(0, 3) // Log first 3 patterns to avoid spam
       );
@@ -201,7 +201,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
       .reduce((sum, weight) => sum + weight, 0);
 
     if (matchedKeywords.length > 0) {
-      logger.info(
+      logger.debug(
         `[PatternIntentDetector] Keyword matches found:`,
         matchedKeywords.slice(0, 5).map(k => `${k.keyword}(${k.weight})`)
       );
@@ -282,7 +282,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
     }
 
     if (matchedKeywords.length > 0) {
-      logger.info(
+      logger.debug(
         `[PatternIntentDetector] Tool-specific keyword matches for ${toolName}:`,
         matchedKeywords.map(k => `${k.keyword}(${k.weight})`)
       );
@@ -323,7 +323,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
       this.patterns[toolName] = [];
     }
     this.patterns[toolName].push(...patterns);
-    logger.info(
+    logger.debug(
       `[PatternIntentDetector] Added ${patterns.length} patterns to ${toolName} category`
     );
   }
@@ -334,7 +334,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
    */
   addKeywordWeights(keywords: Record<string, number>): void {
     Object.assign(this.weights, keywords);
-    logger.info(
+    logger.debug(
       `[PatternIntentDetector] Added ${Object.keys(keywords).length} keyword weights:`,
       Object.keys(keywords)
     );
@@ -352,7 +352,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
     this.patterns[toolName] = patterns;
     Object.assign(this.weights, keywords);
 
-    logger.info(
+    logger.debug(
       `[PatternIntentDetector] Added new tool category '${toolName}' with ${patterns.length} patterns and ${Object.keys(keywords).length} keywords`
     );
   }
@@ -364,7 +364,7 @@ export class PatternIntentDetector implements IToolIntentDetector {
   removeToolCategory(toolName: string): boolean {
     if (this.patterns[toolName]) {
       delete this.patterns[toolName];
-      logger.info(
+      logger.debug(
         `[PatternIntentDetector] Removed tool category '${toolName}'`
       );
       return true;

@@ -47,7 +47,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
       name: detector.constructor.name || `Detector${index}`,
     }));
 
-    logger.info(
+    logger.debug(
       `[CompositeIntentDetector] Initialized with ${this.detectorConfigs.length} detectors:`,
       this.detectorConfigs.map(config => ({
         name: config.name,
@@ -62,7 +62,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
    */
   async detectToolIntent(transcript: string): Promise<ToolIntentResult> {
     if (!transcript || transcript.trim().length === 0) {
-      logger.info('[CompositeIntentDetector] Empty transcript provided');
+      logger.debug('[CompositeIntentDetector] Empty transcript provided');
       return {
         requiresTools: false,
         detectedTools: [],
@@ -70,7 +70,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
       };
     }
 
-    logger.info(
+    logger.debug(
       `[CompositeIntentDetector] Running ${this.detectorConfigs.length} detectors for transcript:`,
       transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
     );
@@ -82,7 +82,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
         const result = await config.detector.detectToolIntent(transcript);
         const duration = Date.now() - startTime;
 
-        logger.info(
+        logger.debug(
           `[CompositeIntentDetector] ${config.name} completed in ${duration}ms:`,
           {
             requiresTools: result.requiresTools,
@@ -133,7 +133,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
     // Aggregate results using weighted scoring
     const aggregatedResult = this.aggregateResults(successfulResults);
 
-    logger.info(
+    logger.debug(
       `[CompositeIntentDetector] Aggregated result from ${successfulResults.length}/${detectorResults.length} successful detectors:`,
       {
         requiresTools: aggregatedResult.requiresTools,
@@ -232,7 +232,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
       config.weight = config.weight / weightSum;
     });
 
-    logger.info(
+    logger.debug(
       `[CompositeIntentDetector] Updated weight for '${detectorName}' and renormalized:`,
       this.detectorConfigs.map(config => ({
         name: config.name,
@@ -273,7 +273,7 @@ export class CompositeIntentDetector implements IToolIntentDetector {
       config.weight = config.weight / weightSum;
     });
 
-    logger.info(
+    logger.debug(
       `[CompositeIntentDetector] Added detector '${detectorName}' and renormalized weights:`,
       this.detectorConfigs.map(config => ({
         name: config.name,

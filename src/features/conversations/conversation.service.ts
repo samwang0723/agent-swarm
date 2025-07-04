@@ -39,37 +39,11 @@ const createIntentDetector = (): IToolIntentDetector => {
 // Global intent detector instance
 const intentDetector = createIntentDetector();
 
-// Add performance optimization utilities
-const intentCache = new Map<string, ToolIntentResult>();
-const ragCache = new Map<string, { context: string; timestamp: number }>();
-const RAG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Hash function for caching
-function hashMessage(message: string): string {
-  return Buffer.from(message.toLowerCase().trim())
-    .toString('base64')
-    .slice(0, 16);
-}
-
 // Optimized intent detection with caching
 async function optimizedIntentDetection(
   message: string
 ): Promise<ToolIntentResult> {
-  const messageHash = hashMessage(message);
-
-  if (intentCache.has(messageHash)) {
-    return intentCache.get(messageHash)!;
-  }
-
   const result = await intentDetector.detectToolIntent(message);
-  intentCache.set(messageHash, result);
-
-  // Clean cache periodically (keep last 100 entries)
-  if (intentCache.size > 100) {
-    const entries = Array.from(intentCache.entries());
-    intentCache.clear();
-    entries.slice(-50).forEach(([key, value]) => intentCache.set(key, value));
-  }
 
   return result;
 }
@@ -83,13 +57,6 @@ async function optimizedRagProcessing(
 ): Promise<{ context: string; ragApplied: boolean }> {
   if (!intentResult.requiresTools || !intentResult.detectedTools) {
     return { context: '', ragApplied: false };
-  }
-
-  const cacheKey = `${session.id}:${hashMessage(message)}:${clientTimezone}`;
-  const cached = ragCache.get(cacheKey);
-
-  if (cached && Date.now() - cached.timestamp < RAG_CACHE_TTL) {
-    return { context: cached.context, ragApplied: true };
   }
 
   const ragPromises: Promise<{ type: string; content: string }>[] = [];
@@ -177,17 +144,6 @@ async function optimizedRagProcessing(
   const unifiedContext = contextSections.join('\n\n---\n\n');
   const context = `Based on the following context, please answer the question (time responses using timezone ${clientTimezone}) or use tools.\n\nContext:\n${unifiedContext}\n\nQuestion: ${message}`;
   const ragApplied = true;
-
-  if (ragApplied) {
-    ragCache.set(cacheKey, { context, timestamp: Date.now() });
-
-    // Clean cache periodically
-    if (ragCache.size > 50) {
-      const entries = Array.from(ragCache.entries());
-      ragCache.clear();
-      entries.slice(-25).forEach(([key, value]) => ragCache.set(key, value));
-    }
-  }
 
   return { context, ragApplied };
 }
@@ -488,7 +444,6 @@ export async function sendMessage(
   logger.info(
     `[${session.id}] Intent detection + orchestration took ${intentDetectionDuration}ms.`
   );
-
   // Log the actual intent detection result for debugging
   logger.info(`[${session.id}] Intent detection result:`, {
     requiresTools: intentResult.requiresTools,
@@ -509,14 +464,7 @@ export async function sendMessage(
   if (ragApplied) {
     const ragDuration = Date.now() - ragStartTime;
     logger.info(`[${session.id}] RAG processing took ${ragDuration}ms.`);
-    augmentedMessage += ragContext;
-  }
-
-  // 6. Route to appropriate handler
-  if (ragApplied) {
-    logger.info(
-      `[${session.id}] RAG flow: handleRagStream with cached context`
-    );
+    augmentedMessage = ragContext + '\n\n' + augmentedMessage;
     return handleRagStream(session, model, outputStrategy, augmentedMessage);
   }
 

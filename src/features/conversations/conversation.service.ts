@@ -2,7 +2,10 @@ import { LanguageModelV1, streamText } from 'ai';
 import { OutputStrategy } from './conversation.dto';
 import logger from '../../shared/utils/logger';
 import { Session } from '../../shared/middleware/auth';
-import { getOrCreateUserOrchestration } from '../agents/agent.swarm';
+import {
+  getCurrentAgentForUser,
+  getOrCreateUserOrchestration,
+} from '../agents/agent.swarm';
 import { mastraMemoryService } from '../agents/mastra.memory';
 import { embeddingService } from '../embeddings';
 import { getCalendarEventsByTimeRange } from '../calendar/calendar.repository';
@@ -317,6 +320,13 @@ async function handleSwarmStream(
           }
         );
       }
+    } else {
+      targetAgent =
+        getCurrentAgentForUser(session.id) || orchestration.receptionistAgent;
+      selectedAgentId = targetAgent.id;
+      logger.info(
+        `[${session.id}] Routing to specific agent ${selectedAgentId} based on intent`
+      );
     }
 
     // The targetAgent is now correctly typed as MastraAgent
@@ -344,8 +354,8 @@ async function handleSwarmStream(
     const response = await agent.stream(augmentedMessage, {
       resourceId: memoryContext.resourceId,
       threadId: memoryContext.threadId,
-      maxRetries: 0,
-      maxSteps: 2,
+      maxRetries: 1,
+      maxSteps: 5,
       onFinish: result => {
         const duration = Date.now() - startTime;
         logger.info(`[${session.id}] Agent: Stream took ${duration} ms`);
@@ -354,13 +364,16 @@ async function handleSwarmStream(
 
     for await (const chunk of response.fullStream) {
       if (chunk.type === 'text-delta') {
-        logger.info(`[${session.id}] Agent: Chunk: ${chunk.textDelta}`);
+        logger.debug(`[${session.id}] Agent: Chunk: ${chunk.textDelta}`);
         accumulatedText += chunk.textDelta;
         outputStrategy.onChunk?.(chunk.textDelta, accumulatedText);
       }
     }
 
     outputStrategy.onFinish?.({ complete: true, sessionId: session.id });
+
+    // Update the orchestration state to the current agent
+    orchestration.state.currentAgent = agent.id;
 
     const messages = [
       { role: 'user', content: augmentedMessage },

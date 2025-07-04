@@ -205,6 +205,7 @@ export class McpClient {
     };
 
     try {
+      const startTime = Date.now();
       logger.info(
         `Calling tool ${name} with parameters: ${JSON.stringify(payload)}, headers: ${JSON.stringify(headers)}`
       );
@@ -228,6 +229,11 @@ export class McpClient {
       const responseText = await response.text();
 
       const result = this.parseResponse(responseText);
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      logger.info(
+        `Tool call result: ${JSON.stringify(result).slice(0, 200)}... in ${duration}ms`
+      );
 
       if (result.error) {
         const errorMessage = `Tool execution error: ${result.error.message}`;

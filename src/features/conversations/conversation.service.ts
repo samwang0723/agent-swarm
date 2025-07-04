@@ -245,6 +245,10 @@ async function handleRagStream(
       );
     }
 
+    logger.info(
+      `[${session.id}] RAG: Starting stream, model: ${model.modelId}, userMessage: ${userMessage}`
+    );
+    const startTime = Date.now();
     const result = streamText({
       model,
       messages: [
@@ -256,6 +260,9 @@ async function handleRagStream(
     });
 
     const finalText = await readTextStream(result.textStream, outputStrategy);
+
+    const duration = Date.now() - startTime;
+    logger.info(`[${session.id}] RAG: Stream took ${duration} ms`);
 
     // Save assistant message for session state (best effort)
     try {
@@ -385,12 +392,13 @@ async function handleSwarmStream(
       maxSteps: 2,
       onFinish: result => {
         const duration = Date.now() - startTime;
-        logger.info(`[${session.id}] Stream took ${duration} ms`);
+        logger.info(`[${session.id}] Agent: Stream took ${duration} ms`);
       },
     });
 
     for await (const chunk of response.fullStream) {
       if (chunk.type === 'text-delta') {
+        logger.info(`[${session.id}] Agent: Chunk: ${chunk.textDelta}`);
         accumulatedText += chunk.textDelta;
         outputStrategy.onChunk?.(chunk.textDelta, accumulatedText);
       }

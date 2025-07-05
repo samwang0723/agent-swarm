@@ -1,8 +1,8 @@
 import type {
   IToolIntentDetector,
   ToolIntentResult,
-} from '@/features/intent/intentDetector.service';
-import logger from '@/shared/utils/logger';
+} from '../../features/intent/intentDetector.service';
+import logger from '../utils/logger';
 
 /**
  * Keyword-based implementation of tool intent detection.
@@ -220,7 +220,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
         totalMatches += matches;
         maxMatches = Math.max(maxMatches, matches);
 
-        logger.info(
+        logger.debug(
           `[KeywordIntentDetector] Detected ${toolName} tool intent with ${matches} keyword matches (threshold: ${minimumMatches}):`,
           matchedKeywords
         );
@@ -245,17 +245,21 @@ export class KeywordIntentDetector implements IToolIntentDetector {
     };
 
     if (requiresTools) {
-      logger.info(`[KeywordIntentDetector] Tool intent detected:`, {
-        transcript:
-          transcript.substring(0, 100) + (transcript.length > 100 ? '...' : ''),
-        detectedTools,
-        confidence,
-        totalMatches,
-      });
-    } else {
       logger.info(
-        `[KeywordIntentDetector] No tool intent detected for transcript:`,
-        transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
+        `[KeywordIntentDetector] Tool intent detected: ${
+          transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
+        }`,
+        {
+          detectedTools,
+          confidence,
+          totalMatches,
+        }
+      );
+    } else {
+      logger.debug(
+        `[KeywordIntentDetector] No tool intent detected for transcript: ${
+          transcript.substring(0, 100) + (transcript.length > 100 ? '...' : '')
+        }`
       );
     }
 
@@ -279,7 +283,7 @@ export class KeywordIntentDetector implements IToolIntentDetector {
       this.toolKeywords[toolName] = [];
     }
     this.toolKeywords[toolName].push(...keywords);
-    logger.info(
+    logger.debug(
       `[KeywordIntentDetector] Added ${keywords.length} keywords to ${toolName} category`
     );
   }

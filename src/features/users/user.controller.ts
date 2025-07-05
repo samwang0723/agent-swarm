@@ -2,16 +2,16 @@ import { Hono, Context } from 'hono';
 import { google } from 'googleapis';
 import crypto from 'crypto';
 import { randomUUID } from 'crypto';
-import logger from '@/shared/utils/logger';
+import logger from '../../shared/utils/logger';
 import {
   storeUserSession,
   removeUserSession,
   Session,
   requireAuth,
   getUserSession,
-} from '@/shared/middleware/auth';
-import { createServerError } from '@/shared/utils/api-error';
-import { ErrorCodes } from '@/shared/utils/error-code';
+} from '../../shared/middleware/auth';
+import { createServerError } from '../../shared/utils/api-error';
+import { ErrorCodes } from '../../shared/utils/error-code';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import {
   UserService,
@@ -21,11 +21,8 @@ import {
   storeAuthCode,
   getAuthCode,
   deleteAuthCode,
-} from '@/features/users/user.service';
-import {
-  syncCalendarTask,
-  syncGmailTask,
-} from '@/features/tasks/task.controller';
+} from './user.service';
+import { syncCalendarTask, syncGmailTask } from '../tasks/task.controller';
 
 type Env = {
   Variables: {

@@ -1,4 +1,4 @@
-import { query } from '@/shared/infrastructure/database';
+import { query } from '../../shared/infrastructure/database';
 import { CalendarEvent } from './calendar.dto';
 
 export const insertCalendarEvents = async (

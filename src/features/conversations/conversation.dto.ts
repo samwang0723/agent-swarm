@@ -1,6 +1,6 @@
 import { CoreMessage, LanguageModelUsage, ToolCall, ToolResult } from 'ai';
 import { SSEStreamingApi } from 'hono/streaming';
-import logger from '@/shared/utils/logger';
+import logger from '../../shared/utils/logger';
 
 export type Message = CoreMessage;
 

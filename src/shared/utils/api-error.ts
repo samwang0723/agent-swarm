@@ -1,4 +1,4 @@
-import { ErrorCodes, ErrorMessages } from '@/shared/utils/error-code';
+import { ErrorCodes, ErrorMessages } from './error-code';
 
 /**
  * Custom API Error class for consistent error handling

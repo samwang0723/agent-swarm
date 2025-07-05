@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import logger from '@/shared/utils/logger';
+import logger from './logger';
 import { JsonSchema, JsonSchemaProperty } from '../types/json-schema';
 
 /**

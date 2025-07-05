@@ -1,7 +1,7 @@
-import { Tool } from 'ai';
+import { createTool, Tool, ToolExecutionContext } from '@mastra/core/tools';
 import { z } from 'zod';
-import logger from '@/shared/utils/logger';
-import type { ModelProvider } from '@/shared/config/models';
+import logger from '../../shared/utils/logger';
+import type { ModelProvider } from '../../shared/config/models';
 import {
   McpServerConfig,
   McpTool,
@@ -9,7 +9,7 @@ import {
   ToolsListResult,
   ToolCallResult,
 } from './mcp.dto';
-import { JsonSchema } from '@/shared/types/json-schema';
+import { JsonSchema } from '../../shared/types/json-schema';
 
 export class McpClient {
   private sessionId: string | null = null;
@@ -154,6 +154,7 @@ export class McpClient {
     }
 
     this.availableTools = (result.result as ToolsListResult)?.tools || [];
+
     logger.info(
       `Loaded ${this.availableTools.length} tools from ${this.config.name}:`,
       this.availableTools.map(t => t.name)
@@ -162,7 +163,7 @@ export class McpClient {
 
   async callTool(
     name: string,
-    parameters: Record<string, unknown>,
+    parameters: Record<string, unknown> | ToolExecutionContext<z.ZodType>,
     requiresAuth?: boolean
   ): Promise<unknown> {
     if (!this.sessionId) {
@@ -192,16 +193,26 @@ export class McpClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
+    // Handle both raw parameters and ToolExecutionContext
+    const toolParameters =
+      'context' in parameters ? parameters.context : parameters;
+
+    const payload = {
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { name, arguments: toolParameters },
+      id: Date.now(),
+    };
+
     try {
+      const startTime = Date.now();
+      logger.info(
+        `Calling tool ${name} with parameters: ${JSON.stringify(payload)}, headers: ${JSON.stringify(headers)}`
+      );
       const response = await fetch(this.config.url, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'tools/call',
-          params: { name, arguments: parameters },
-          id: Date.now(),
-        }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(
           parseInt(process.env.MCP_TIMEOUT || '30000')
         ),
@@ -209,17 +220,24 @@ export class McpClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(
-          `Tool call failed: ${response.status} ${response.statusText} - ${errorText}`
-        );
+        const errorMessage = `Tool call failed: ${response.status} ${response.statusText} - ${errorText}`;
+
+        throw new Error(errorMessage);
       }
 
       // Handle both JSON and SSE responses
       const responseText = await response.text();
+
       const result = this.parseResponse(responseText);
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      logger.info(
+        `Tool call result: ${JSON.stringify(result).slice(0, 200)}... in ${duration}ms`
+      );
 
       if (result.error) {
-        throw new Error(`Tool execution error: ${result.error.message}`);
+        const errorMessage = `Tool execution error: ${result.error.message}`;
+        throw new Error(errorMessage);
       }
 
       // Handle MCP response format
@@ -241,27 +259,34 @@ export class McpClient {
       ) {
         const timeout = parseInt(process.env.MCP_TIMEOUT || '30000') / 1000;
         const errorMessage = `The tool call to '${name}' timed out after ${timeout} seconds. Please try again later.`;
+
         logger.error(errorMessage);
         return {
           error: errorMessage,
         };
       }
+
       throw error;
     }
   }
 
-  getAvailableTools(): Tool[] {
-    return this.availableTools.map(mcpTool => ({
-      description: mcpTool.description,
-      parameters: this.convertInputSchemaToZod(mcpTool.inputSchema),
-      execute: async parameters => {
-        return await this.callTool(
-          mcpTool.name,
-          parameters,
-          mcpTool.requiresAuth
-        );
-      },
-    }));
+  getAvailableTools(): Tool<z.ZodType>[] {
+    return this.availableTools.map(mcpTool => {
+      const zodSchema = this.convertInputSchemaToZod(mcpTool.inputSchema);
+
+      return createTool({
+        id: mcpTool.name,
+        description: mcpTool.description,
+        inputSchema: zodSchema,
+        execute: async parameters => {
+          return await this.callTool(
+            mcpTool.name,
+            parameters,
+            mcpTool.requiresAuth
+          );
+        },
+      });
+    });
   }
 
   private convertInputSchemaToZod(schema: JsonSchema): z.ZodType {

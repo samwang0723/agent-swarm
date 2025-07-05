@@ -1,14 +1,14 @@
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { Session } from '@/shared/middleware/auth';
-import logger from '@/shared/utils/logger';
+import { Session } from '../../shared/middleware/auth';
+import logger from '../../shared/utils/logger';
 import {
   createModel,
   getCurrentModelInfo,
   getAvailableModels,
-} from '@/shared/config/models';
-import { requireAuth } from '@/shared/middleware/auth';
-import { initializeSwarm } from '@/features/agents/agent.swarm';
+} from '../../shared/config/models';
+import { requireAuth } from '../../shared/middleware/auth';
+import { initializeSwarm } from '../agents/agent.swarm';
 import { messageHistory } from './history.service';
 import { sendMessage } from './conversation.service';
 import { HonoSSEOutput, OutputStrategy } from './conversation.dto';
@@ -127,9 +127,9 @@ app.get('/models', requireAuth, c => {
  *       401:
  *         description: Unauthorized - authentication required
  */
-app.get('/history', requireAuth, c => {
+app.get('/history', requireAuth, async c => {
   const user = c.get('user');
-  const history = messageHistory.getHistory(user.id);
+  const history = await messageHistory.getHistory(user.id, user.sessionId);
 
   return c.json({
     userId: user.id,
@@ -164,7 +164,7 @@ app.get('/history', requireAuth, c => {
  */
 app.delete('/history', requireAuth, c => {
   const user = c.get('user');
-  messageHistory.clearHistory(user.id);
+  messageHistory.clearHistory(user.id, user.sessionId);
   return c.json({ message: 'History cleared', userId: user.id });
 });
 
@@ -194,7 +194,7 @@ app.delete('/history', requireAuth, c => {
  */
 app.post('/init', requireAuth, c => {
   const user = c.get('user');
-  initializeSwarm(user, model);
+  initializeSwarm(user);
   return c.json({ success: true, message: 'Swarm initialized' });
 });
 

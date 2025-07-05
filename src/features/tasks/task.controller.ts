@@ -3,8 +3,8 @@ import {
   Client,
   WorkflowExecutionAlreadyStartedError,
 } from '@temporalio/client';
-import { syncGmail, syncCalendar } from '@/features/tasks/temporal.workflows';
-import config from '@/shared/config';
+import { syncGmail, syncCalendar } from './temporal.workflows';
+import config from '../../shared/config';
 import { nanoid } from 'nanoid';
 
 export const syncGmailTask = async (

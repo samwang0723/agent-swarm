@@ -1,4 +1,4 @@
-import { query } from '@/shared/infrastructure/database';
+import { query } from '../../shared/infrastructure/database';
 import { GmailMessage } from './email.dto';
 
 export const insertEmails = async (

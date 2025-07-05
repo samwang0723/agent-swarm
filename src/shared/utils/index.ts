@@ -1,4 +1,4 @@
 // Barrel exports for utilities
-export * from '@/shared/utils/api-error';
-export * from '@/shared/utils/error-code';
-export { default as logger } from '@/shared/utils/logger';
+export * from './api-error';
+export * from './error-code';
+export { default as logger } from './logger';

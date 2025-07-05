@@ -1,7 +1,7 @@
 import * as workflow from '@temporalio/workflow';
 
 // Only import the activity types
-import type * as activities from '@/features/tasks/temporal.activities';
+import type * as activities from './temporal.activities';
 
 // Load Activities and assign the Retry Policy
 const { importGmail, importCalendar } = workflow.proxyActivities<

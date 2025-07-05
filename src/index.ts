@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serveStatic } from 'hono/bun';
-import { apiRouter } from '@/api/routes';
-import logger from '@/shared/utils/logger';
-import { ApiError } from '@/shared/utils/api-error';
-import { ErrorCodes } from '@/shared/utils/error-code';
+import { apiRouter } from './api/routes';
+import logger from './shared/utils/logger';
+import { ApiError } from './shared/utils/api-error';
+import { ErrorCodes } from './shared/utils/error-code';
 import { ContentfulStatusCode } from 'hono/utils/http-status';
 
 const app = new Hono();

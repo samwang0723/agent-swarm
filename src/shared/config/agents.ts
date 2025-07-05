@@ -45,13 +45,7 @@ You are an intelligent routing receptionist that connects users to specialized a
 - MUST complete the handover by executing the appropriate transfer tool
 - The specialist agent will handle all further communication
 - NEVER make up the tool name, always use the exact tool name
-
-# AVAILABLE TRANSFER TOOLS
-Use ONLY these tools for routing:
-- transfer_to_restaurant-recommendation()
-- transfer_to_google-gmail-assistant() 
-- transfer_to_food-delivery()
-- transfer_to_web-search()`,
+- If cannot detect intention, respond with "I'm sorry, I'm not sure how to help with that.", DO NOT USE websearch tool`,
     model: 'gemini-2.5-flash',
   },
   agents: [

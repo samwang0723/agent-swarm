@@ -1,16 +1,17 @@
-import { Tool } from 'ai';
+import { Tool } from '@mastra/core';
 import { McpServerConfig } from './mcp.dto';
 import { McpClient } from './mcp.service';
-import logger from '@/shared/utils/logger';
-import type { ModelProvider } from '@/shared/config/models';
-import { mcpServers } from '@/shared/config/mcp';
+import logger from '../../shared/utils/logger';
+import type { ModelProvider } from '../../shared/config/models';
+import { mcpServers } from '../../shared/config/mcp';
 // import { logCompleteToolRegistryForLLM } from '@utils/schema-logger';
-import { getCurrentModelInfo } from '@/shared/config/models';
+import { getCurrentModelInfo } from '../../shared/config/models';
+import { z } from 'zod';
 
 export class McpRegistry {
   private clients: Map<string, McpClient> = new Map();
-  private allTools: Map<string, Tool> = new Map();
-  private toolsByServer: Map<string, Map<string, Tool>> = new Map();
+  private allTools: Map<string, Tool<z.ZodType>> = new Map();
+  private toolsByServer: Map<string, Map<string, Tool<z.ZodType>>> = new Map();
 
   constructor(
     private configs: McpServerConfig[],
@@ -54,7 +55,7 @@ export class McpRegistry {
       this.clients.set(config.name, client);
 
       // Initialize server-specific tools map
-      const serverTools = new Map<string, Tool>();
+      const serverTools = new Map<string, Tool<z.ZodType>>();
       this.toolsByServer.set(config.name, serverTools);
 
       // Register all tools from this client
@@ -85,8 +86,8 @@ export class McpRegistry {
   /**
    * Get all registered tools as a flattened object with prefixed names
    */
-  getTools(): Record<string, Tool> {
-    const toolsObject: Record<string, Tool> = {};
+  getTools(): Record<string, Tool<z.ZodType>> {
+    const toolsObject: Record<string, Tool<z.ZodType>> = {};
     this.allTools.forEach((tool, name) => {
       toolsObject[name] = tool;
     });
@@ -96,11 +97,14 @@ export class McpRegistry {
   /**
    * Get tools grouped by MCP server name
    */
-  getToolsByServerMap(): Record<string, Record<string, Tool>> {
-    const serverToolsObject: Record<string, Record<string, Tool>> = {};
+  getToolsByServerMap(): Record<string, Record<string, Tool<z.ZodType>>> {
+    const serverToolsObject: Record<
+      string,
+      Record<string, Tool<z.ZodType>>
+    > = {};
 
     this.toolsByServer.forEach((tools, serverName) => {
-      const toolsObject: Record<string, Tool> = {};
+      const toolsObject: Record<string, Tool<z.ZodType>> = {};
       tools.forEach((tool, toolName) => {
         toolsObject[toolName] = tool;
       });
@@ -113,13 +117,13 @@ export class McpRegistry {
   /**
    * Get tools from a specific MCP server as objects
    */
-  getServerTools(serverName: string): Record<string, Tool> {
+  getServerTools(serverName: string): Record<string, Tool<z.ZodType>> {
     const serverTools = this.toolsByServer.get(serverName);
     if (!serverTools) {
       return {};
     }
 
-    const toolsObject: Record<string, Tool> = {};
+    const toolsObject: Record<string, Tool<z.ZodType>> = {};
     serverTools.forEach((tool, toolName) => {
       toolsObject[toolName] = tool;
     });
@@ -137,14 +141,17 @@ export class McpRegistry {
   /**
    * Get a specific tool by name
    */
-  getTool(name: string): Tool | undefined {
+  getTool(name: string): Tool<z.ZodType> | undefined {
     return this.allTools.get(name);
   }
 
   /**
    * Get a specific tool from a specific server
    */
-  getServerTool(serverName: string, toolName: string): Tool | undefined {
+  getServerTool(
+    serverName: string,
+    toolName: string
+  ): Tool<z.ZodType> | undefined {
     const serverTools = this.toolsByServer.get(serverName);
     return serverTools?.get(toolName);
   }
@@ -261,21 +268,21 @@ export class ToolRegistry {
   /**
    * Get all registered tools as a flattened object with prefixed names
    */
-  getTools(): Record<string, Tool> {
+  getTools(): Record<string, Tool<z.ZodType>> {
     return this.mcpRegistry.getTools();
   }
 
   /**
    * Get tools grouped by MCP server name
    */
-  getToolsByServerMap(): Record<string, Record<string, Tool>> {
+  getToolsByServerMap(): Record<string, Record<string, Tool<z.ZodType>>> {
     return this.mcpRegistry.getToolsByServerMap();
   }
 
   /**
    * Get tools from a specific MCP server
    */
-  getServerTools(serverName: string): Record<string, Tool> {
+  getServerTools(serverName: string): Record<string, Tool<z.ZodType>> {
     return this.mcpRegistry.getServerTools(serverName);
   }
 
@@ -296,14 +303,17 @@ export class ToolRegistry {
   /**
    * Get a specific tool by name
    */
-  getTool(name: string): Tool | undefined {
+  getTool(name: string): Tool<z.ZodType> | undefined {
     return this.mcpRegistry.getTool(name);
   }
 
   /**
    * Get a specific tool from a specific server
    */
-  getServerTool(serverName: string, toolName: string): Tool | undefined {
+  getServerTool(
+    serverName: string,
+    toolName: string
+  ): Tool<z.ZodType> | undefined {
     return this.mcpRegistry.getServerTool(serverName, toolName);
   }
 

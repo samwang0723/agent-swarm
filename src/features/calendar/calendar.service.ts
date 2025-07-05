@@ -6,9 +6,9 @@ import {
   GoogleCalendarInfo,
   GoogleCalendarsResponse,
 } from './calendar.dto';
-import logger from '@/shared/utils/logger';
-import { McpClient } from '@/features/mcp/mcp.service';
-import { mcpServers } from '@/shared/config/mcp';
+import logger from '../../shared/utils/logger';
+import { McpClient } from '../mcp/mcp.service';
+import { mcpServers } from '../../shared/config/mcp';
 
 export class CalendarService {
   private client: McpClient | null = null;

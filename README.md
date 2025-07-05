@@ -832,6 +832,208 @@ erDiagram
   }
 ```
 
+## 🐛 Debugging Tool Execution
+
+The Agent Swarm includes comprehensive debugging capabilities to help diagnose and resolve tool execution issues, particularly when MCP tools receive undefined parameters or fail to execute properly.
+
+### Enabling Debug Mode
+
+To enable detailed MCP debugging, set the `DEBUG_MCP` environment variable:
+
+```bash
+# Enable MCP debugging
+DEBUG_MCP=1 bun run dev
+```
+
+Or add it to your `.env` file:
+
+```env
+# Enable detailed MCP tool execution debugging (set to '1' to enable)
+DEBUG_MCP=1
+```
+
+### What Gets Logged
+
+When debug mode is enabled, the system logs detailed information at critical points in the tool execution pipeline:
+
+#### Schema Loading and Validation
+
+- Complete schema structure returned by MCP servers
+- Tool registration with parameter definitions
+- Schema conversion from JSON Schema to Zod
+- Validation results for each tool configuration
+
+#### Parameter Flow Tracking
+
+- Incoming parameters at each layer (Mastra → MCP)
+- Parameter transformations and validations
+- Complete JSON-RPC payload structure before transmission
+- Raw responses from MCP servers
+
+#### Tool Execution Context
+
+- Agent tool availability and registration status
+- MCP server connectivity and health status
+- Tool call attempts and their outcomes
+- Error contexts with full parameter information
+
+### Interpreting Debug Logs
+
+#### Schema Loading Logs
+
+Look for logs showing tool schema registration:
+
+```
+[DEBUG] MCP Tool Schema Loaded: brave_web_search
+  Description: Search the web for current information
+  Schema: {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search query"
+      }
+    },
+    "required": ["query"]
+  }
+```
+
+#### Parameter Flow Logs
+
+Track parameters through the execution pipeline:
+
+```
+[DEBUG] Mastra Tool Called: brave_web_search
+  Incoming params: { "query": "latest news" }
+
+[DEBUG] MCP Tool Execution
+  Tool: brave_web_search
+  Parameters: { "query": "latest news" }
+  JSON-RPC Payload: {
+    "jsonrpc": "2.0",
+    "id": "123",
+    "method": "tools/call",
+    "params": {
+      "name": "brave_web_search",
+      "arguments": { "query": "latest news" }
+    }
+  }
+```
+
+#### Error Pattern Logs
+
+Identify common failure patterns:
+
+```
+[ERROR] MCP Tool Execution Failed: brave_web_search
+  Parameters sent: { "query": "latest news" }
+  Error: Tool received undefined for parameter 'query'
+  Raw response: { "error": { "code": -32602, "message": "Invalid params" } }
+```
+
+### Common Debug Scenarios
+
+#### Scenario 1: Undefined Parameters
+
+**Symptoms:** Tool receives `undefined` for required parameters
+**Debug Steps:**
+
+1. Check schema loading logs for correct parameter definitions
+2. Verify parameter flow logs show values at each step
+3. Examine JSON-RPC payload structure
+4. Look for schema conversion errors
+
+#### Scenario 2: Schema Mismatches
+
+**Symptoms:** Tools not registering or validation failures
+**Debug Steps:**
+
+1. Check MCP server health endpoint responses
+2. Verify schema conversion from JSON Schema to Zod
+3. Look for fallback to `z.any()` or `z.unknown()`
+4. Check for malformed schema structures
+
+#### Scenario 3: Tool Registration Failures
+
+**Symptoms:** Tools not available to agents
+**Debug Steps:**
+
+1. Check MCP server connectivity logs
+2. Verify tool registry status in health endpoint
+3. Look for agent configuration validation errors
+4. Check authentication token handling
+
+### Log Analysis Examples
+
+#### Successful Tool Execution
+
+```
+[DEBUG] MCP Server Connected: brave-search
+[DEBUG] Tool Schema Loaded: brave_web_search (1 parameters)
+[DEBUG] Agent Tool Registration: brave_web_search → Restaurant Agent
+[DEBUG] Tool Call: brave_web_search({ "query": "restaurants near me" })
+[DEBUG] JSON-RPC Request: {"method": "tools/call", "params": {...}}
+[DEBUG] MCP Response: {"result": {"content": [...]}}
+[INFO] Tool execution successful: brave_web_search
+```
+
+#### Failed Tool Execution with Parameter Issues
+
+```
+[DEBUG] MCP Server Connected: brave-search
+[DEBUG] Tool Schema Loaded: brave_web_search
+[WARN] Schema Conversion Fallback: Using z.any() for malformed schema
+[DEBUG] Tool Call: brave_web_search({ "query": "restaurants near me" })
+[ERROR] Parameter Validation Failed: Expected string, received undefined
+[ERROR] MCP Tool Execution Failed: brave_web_search
+[ERROR] Raw MCP Response: {"error": {"code": -32602, "message": "Invalid params"}}
+```
+
+#### Schema Loading Issues
+
+```
+[DEBUG] Attempting MCP Server Connection: brave-search
+[ERROR] MCP Server Health Check Failed: Connection refused
+[WARN] Tool Registration Skipped: brave_web_search (server unavailable)
+[INFO] Available Tools: 0 (expected: 1)
+```
+
+### Debugging Workflow
+
+1. **Enable Debug Mode**: Set `DEBUG_MCP=1`
+2. **Reproduce Issue**: Trigger the failing tool execution
+3. **Analyze Logs**: Look for the patterns described above
+4. **Check Health Status**: Visit `/api/v1/health` for system status
+5. **Verify Configuration**: Check MCP server configs and environment variables
+6. **Test Connectivity**: Ensure MCP servers are reachable and healthy
+
+### Performance Considerations
+
+Debug logging is designed to be comprehensive but performant:
+
+- Only activates when `DEBUG_MCP=1` is set
+- Uses conditional logging to avoid overhead in production
+- Logs are structured for easy parsing and analysis
+- Sensitive information (tokens, credentials) is redacted
+
+### Disabling Debug Mode
+
+To disable debug logging:
+
+```bash
+# Remove from environment
+unset DEBUG_MCP
+
+# Or set to 0
+DEBUG_MCP=0 bun run dev
+```
+
+Or remove/comment out the line in your `.env` file:
+
+```env
+# DEBUG_MCP=1
+```
+
 ## 🔍 Troubleshooting
 
 ### Common Issues
@@ -862,16 +1064,35 @@ erDiagram
    - Review logs for routing decisions and tool calls
 
 5. **Tools Not Available**
+
    - Check MCP server configuration in `src/shared/config/mcp.ts`
    - Verify environment variables
    - Check tool registry status: `GET /api/v1/health` endpoint
    - Review MCP server health endpoints
 
+6. **Tool Execution Failures**
+
+   - Enable MCP debugging with `DEBUG_MCP=1`
+   - Check parameter flow logs for undefined values
+   - Verify schema loading and conversion logs
+   - Review JSON-RPC payload structure in debug output
+   - Check MCP server health and connectivity
+
+7. **Parameter Issues**
+   - Look for schema mismatch errors in debug logs
+   - Verify parameter names match schema definitions
+   - Check for schema conversion fallbacks to `z.any()`
+   - Review parameter validation logs
+
 ### Debug Mode
 
-Enable debug logging by setting log level:
+Enable comprehensive debug logging:
 
 ```bash
+# Enable MCP tool execution debugging
+DEBUG_MCP=1 bun run dev
+
+# Enable general debug logging
 DEBUG=* bun run dev
 ```
 
@@ -880,6 +1101,8 @@ Check the `/api/v1/health` endpoint for detailed system status:
 ```bash
 curl http://localhost:3000/api/v1/health
 ```
+
+For tool execution issues, follow the debugging workflow in the [Debugging Tool Execution](#-debugging-tool-execution) section above.
 
 ## 🤝 Contributing
 
